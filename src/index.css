@@ -1,0 +1,66 @@
+@import "tailwindcss";
+
+:root {
+  --brand: #FF6B00;
+  --brand-dark: #E55A00;
+  --bg: #FAFAFA;
+  --ink: #1A1A1A;
+  --accent: #22C55E;
+}
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  font-family: "Plus Jakarta Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Hide scrollbar for horizontal scroll containers */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* Rider pin pulse animation */
+@keyframes pulse-ring {
+  0% { transform: scale(0.8); opacity: 0.8; }
+  80%, 100% { transform: scale(2.2); opacity: 0; }
+}
+.rider-pulse::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  background: #FF6B00;
+  animation: pulse-ring 1.6s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  z-index: -1;
+}
+
+/* Card hover lift */
+.card-lift { transition: transform .25s ease, box-shadow .25s ease; }
+.card-lift:hover { transform: translateY(-2px); box-shadow: 0 10px 30px -12px rgba(0,0,0,0.15); }
+
+/* Smooth page transitions */
+main { animation: fade-in .25s ease; }
+@keyframes fade-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+
+/* Map dotted pattern */
+.map-bg {
+  background-color: #EAF2E8;
+  background-image:
+    radial-gradient(circle at 20% 30%, rgba(255,255,255,0.8) 0 2px, transparent 2px),
+    radial-gradient(circle at 70% 60%, rgba(255,255,255,0.8) 0 2px, transparent 2px),
+    linear-gradient(135deg, #EAF2E8 0%, #DCE8D6 100%);
+  background-size: 40px 40px, 60px 60px, 100% 100%;
+}
+
+/* Road lines on map */
+.road {
+  background:
+    linear-gradient(90deg, transparent 0 10px, #ffffff 10px 20px) repeat-x,
+    #CBD5C1;
+  background-size: 20px 4px, 100% 100%;
+}
