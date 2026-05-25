@@ -28,6 +28,11 @@ import {
 } from "../utils/helpers";
 
 // ─────────────────────────────────────────────
+// Admin PIN — change this or move to env var
+// ─────────────────────────────────────────────
+const ADMIN_PIN = import.meta.env.VITE_ADMIN_PIN ?? "instadal2024";
+
+// ─────────────────────────────────────────────
 // Types
 // ─────────────────────────────────────────────
 export type User = {
@@ -36,6 +41,8 @@ export type User = {
   phone: string;
   primaryRole: RoleView;
   allowedViews: RoleView[];
+  locationState?: string;
+  locationCity?: string;
   partnerPermissions?: PartnerPermission[];
   isStaffAccount?: boolean;
   isGuest?: boolean;
@@ -47,12 +54,21 @@ type AppContextValue = {
   session: Session | null;
   currentView: RoleView;
   authLoading: boolean;
-  signUp: (name: string, phone: string, primaryRole: RoleView) => Promise<void>;
-  signIn: (phone: string) => Promise<void>;
-  verifyOtp: (phone: string, token: string) => Promise<RoleView>;
+
+  // Updated auth signatures — no more OTP
+  signUp: (
+    name: string,
+    phone: string,
+    primaryRole: RoleView,
+    locationState: string,
+    locationCity: string
+  ) => Promise<void>;
+  signIn: (phone: string, password: string) => Promise<RoleView>;
+  loginAsAdmin: (pin: string) => Promise<void>;
   loginAsGuest: () => void;
   loginAsStaff: (staff: PartnerStaff) => void;
   logout: () => Promise<void>;
+
   setCurrentView: (v: RoleView) => void;
   canView: (v: RoleView) => boolean;
   canPartner: (p: PartnerPermission) => boolean;
@@ -67,7 +83,7 @@ type AppContextValue = {
   customerAddress: string;
   setCustomerAddress: (a: string) => void;
 
-  // Cart (client-side only — no need to persist in DB)
+  // Cart
   cart: CartItem[];
   addToCart: (p: Product) => void;
   removeFromCart: (pid: string) => void;
@@ -94,7 +110,12 @@ type AppContextValue = {
 
   // Ratings
   ratings: Rating[];
-  submitRating: (targetType: "shop" | "product", targetId: string, score: number, comment?: string) => Promise<void>;
+  submitRating: (
+    targetType: "shop" | "product",
+    targetId: string,
+    score: number,
+    comment?: string
+  ) => Promise<void>;
 
   // Saved addresses
   savedAddresses: SavedAddress[];
@@ -105,7 +126,9 @@ type AppContextValue = {
 
   // Partner applications
   applications: PartnerApplication[];
-  submitApplication: (a: Omit<PartnerApplication, "id" | "status" | "createdAt">) => Promise<PartnerApplication>;
+  submitApplication: (
+    a: Omit<PartnerApplication, "id" | "status" | "createdAt">
+  ) => Promise<PartnerApplication>;
   approveApplication: (id: string) => Promise<void>;
   rejectApplication: (id: string, reason?: string) => Promise<void>;
 
@@ -364,15 +387,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
         phone: data.phone ?? "",
         primaryRole: role,
         allowedViews: DEFAULT_ALLOWED_VIEWS[role],
+        locationState: data.location_state ?? undefined,
+        locationCity: data.location_city ?? undefined,
       };
       setUser(u);
       setCurrentViewState(role);
+      // Sync location selection to user's saved location
+      if (data.location_state) setSelectedState(data.location_state);
+      if (data.location_city) setSelectedCity(data.location_city);
     }
     setAuthLoading(false);
   };
 
   // ─────────────────────────────────────────
-  // Load shops on mount (public — no auth needed)
+  // Load shops on mount
   // ─────────────────────────────────────────
   useEffect(() => {
     const fetchShops = async () => {
@@ -406,10 +434,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       .select("*, order_items(*)")
       .order("created_at", { ascending: false });
 
-    // Scope to role
     if (user.primaryRole === "customer") query = query.eq("customer_id", user.id);
     else if (user.primaryRole === "rider") query = query.eq("rider_id", user.id);
-    // partner and admin: RLS handles it
 
     const { data, error } = await query;
     if (!error && data) setOrders(data.map(rowToOrder));
@@ -417,7 +443,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   // ─────────────────────────────────────────
-  // Load riders (admin / partner view)
+  // Load riders (admin / partner)
   // ─────────────────────────────────────────
   useEffect(() => {
     if (!user || (user.primaryRole !== "admin" && user.primaryRole !== "partner")) return;
@@ -430,11 +456,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [user?.primaryRole]);
 
   // ─────────────────────────────────────────
-  // Load partner staff (partner / admin)
+  // Load partner staff
   // ─────────────────────────────────────────
   useEffect(() => {
     if (!user || (user.primaryRole !== "partner" && user.primaryRole !== "admin")) return;
-    // Find the shop owned by this user
     supabase
       .from("shops")
       .select("id")
@@ -453,7 +478,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [user?.id, user?.primaryRole]);
 
   // ─────────────────────────────────────────
-  // Load ratings (public)
+  // Load ratings
   // ─────────────────────────────────────────
   useEffect(() => {
     supabase.from("ratings").select("*").then(({ data }) => {
@@ -462,7 +487,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // ─────────────────────────────────────────
-  // Load saved addresses (authenticated users)
+  // Load saved addresses
   // ─────────────────────────────────────────
   useEffect(() => {
     if (!user || user.isGuest) return;
@@ -477,7 +502,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [user?.id]);
 
   // ─────────────────────────────────────────
-  // Load partner applications (admin only)
+  // Load partner applications (admin)
   // ─────────────────────────────────────────
   useEffect(() => {
     if (user?.primaryRole !== "admin") return;
@@ -509,7 +534,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [user?.id]);
 
   // ─────────────────────────────────────────
-  // Persist cart to localStorage
+  // Persist to localStorage
   // ─────────────────────────────────────────
   useEffect(() => {
     localStorage.setItem(CART_KEY, JSON.stringify(cart));
@@ -531,39 +556,152 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // AUTH ACTIONS
   // ═════════════════════════════════════════
 
-  const signUp = async (name: string, phone: string, primaryRole: RoleView) => {
-    // Supabase phone auth: format to E.164 for Nigerian numbers
-    const e164 = phone.startsWith("+") ? phone : "+234" + phone.replace(/^0/, "");
-    const { error } = await supabase.auth.signInWithOtp({
-      phone: e164,
+  /**
+   * SIGN UP
+   * No OTP. Uses Supabase email/password auth with phone as the "email"
+   * (formatted as phone@instadal.app) so we keep Supabase auth simple
+   * without needing a real SMS provider.
+   *
+   * Stores name, phone, role, state, city in the profiles table via
+   * the existing trigger or manual upsert below.
+   *
+   * If you later switch to a real email/phone provider, only this
+   * function needs updating — nothing else changes.
+   */
+  const signUp = async (
+    name: string,
+    phone: string,
+    primaryRole: RoleView,
+    locationState: string,
+    locationCity: string
+  ) => {
+    // Derive a stable fake email from the phone so Supabase can store it
+    const normalizedPhone = phone.replace(/\s+/g, "").replace(/^0/, "234");
+    const fakeEmail = `${normalizedPhone}@instadal.app`;
+    // Use phone as the default password (user can change later via profile)
+    const defaultPassword = normalizedPhone;
+
+    // 1. Create Supabase auth user
+    const { data: authData, error: authError } = await supabase.auth.signUp({
+      email: fakeEmail,
+      password: defaultPassword,
       options: {
-        data: { name, primary_role: primaryRole },
-        shouldCreateUser: true,
+        data: {
+          name,
+          phone,
+          primary_role: primaryRole,
+          location_state: locationState,
+          location_city: locationCity,
+        },
       },
     });
-    if (error) throw new Error(error.message);
+
+    if (authError) {
+      // "User already registered" → they should sign in instead
+      if (authError.message.toLowerCase().includes("already registered")) {
+        throw new Error("This phone number already has an account. Please sign in.");
+      }
+      throw new Error(authError.message);
+    }
+
+    if (!authData.user) throw new Error("Sign up failed. Please try again.");
+
+    // 2. Upsert profile row (handles both trigger-created and manual)
+    const { error: profileError } = await supabase
+      .from("profiles")
+      .upsert({
+        id: authData.user.id,
+        name,
+        phone,
+        primary_role: primaryRole,
+        location_state: locationState,
+        location_city: locationCity,
+      });
+
+    if (profileError) throw new Error(profileError.message);
+
+    // 3. Set local user state immediately (no email confirm needed in dev)
+    const u: User = {
+      id: authData.user.id,
+      name,
+      phone,
+      primaryRole,
+      allowedViews: DEFAULT_ALLOWED_VIEWS[primaryRole],
+      locationState,
+      locationCity,
+    };
+    setUser(u);
+    setCurrentViewState(primaryRole);
+    setSelectedState(locationState);
+    setSelectedCity(locationCity);
   };
 
-  const signIn = async (phone: string) => {
-    const e164 = phone.startsWith("+") ? phone : "+234" + phone.replace(/^0/, "");
-    const { error } = await supabase.auth.signInWithOtp({
-      phone: e164,
-      options: { shouldCreateUser: false },
-    });
-    if (error) throw new Error(error.message);
-  };
+  /**
+   * SIGN IN
+   * Phone + password. Password defaults to the normalized phone number
+   * set during sign-up (e.g. 2348012345678). User can update it later.
+   * Returns the user's primary role so the UI can navigate correctly.
+   */
+  const signIn = async (phone: string, password: string): Promise<RoleView> => {
+    const normalizedPhone = phone.replace(/\s+/g, "").replace(/^0/, "234");
+    const fakeEmail = `${normalizedPhone}@instadal.app`;
 
-  const verifyOtp = async (phone: string, token: string): Promise<RoleView> => {
-    const e164 = phone.startsWith("+") ? phone : "+234" + phone.replace(/^0/, "");
-    const { data, error } = await supabase.auth.verifyOtp({
-      phone: e164,
-      token,
-      type: "sms",
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: fakeEmail,
+      password,
     });
-    if (error) throw new Error(error.message);
-    const role = (data.user?.user_metadata?.primary_role as RoleView) ?? "customer";
-    showToast(`Welcome back!`);
+
+    if (error) {
+      if (
+        error.message.toLowerCase().includes("invalid") ||
+        error.message.toLowerCase().includes("credentials")
+      ) {
+        throw new Error("Incorrect phone number or password.");
+      }
+      throw new Error(error.message);
+    }
+
+    if (!data.user) throw new Error("Sign in failed. Please try again.");
+
+    // Profile is loaded by the onAuthStateChange listener,
+    // but we still need to return the role for navigation.
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("primary_role, location_state, location_city")
+      .eq("id", data.user.id)
+      .single();
+
+    const role = (profile?.primary_role as RoleView) ?? "customer";
+
+    if (profile?.location_state) setSelectedState(profile.location_state);
+    if (profile?.location_city) setSelectedCity(profile.location_city);
+
+    showToast("Welcome back! 👋");
     return role;
+  };
+
+  /**
+   * ADMIN LOGIN
+   * Triggered when the user types "admin" in the phone field on the
+   * sign-in tab. Checks a PIN — no Supabase session involved,
+   * just a local privileged user object.
+   */
+  const loginAsAdmin = async (pin: string) => {
+    // Simulate a short async check (replace with a real API call if needed)
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    if (pin !== ADMIN_PIN) throw new Error("Incorrect PIN.");
+
+    const u: User = {
+      id: "u_admin_local",
+      name: "Admin",
+      phone: "admin",
+      primaryRole: "admin",
+      allowedViews: ["customer", "partner", "rider", "admin"],
+    };
+    setUser(u);
+    setCurrentViewState("admin");
+    showToast("Admin access granted 🛠️");
   };
 
   const loginAsGuest = () => {
@@ -596,7 +734,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = async () => {
-    await supabase.auth.signOut();
+    // Guest and staff don't have a real Supabase session
+    if (!user?.isGuest && !user?.isStaffAccount && user?.id !== "u_admin_local") {
+      await supabase.auth.signOut();
+    }
     setUser(null);
     setSession(null);
     setCurrentViewState("customer");
@@ -633,11 +774,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       .from("shops")
       .update({ is_open: !shop.isOpen })
       .eq("id", id);
-    if (!error) setShops((s) => s.map((x) => x.id === id ? { ...x, isOpen: !x.isOpen } : x));
+    if (!error)
+      setShops((s) => s.map((x) => x.id === id ? { ...x, isOpen: !x.isOpen } : x));
   };
 
   // ═════════════════════════════════════════
-  // CART (client-side)
+  // CART
   // ═════════════════════════════════════════
 
   const addToCart = (p: Product) => {
@@ -682,7 +824,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const deliveryFee = 500;
     const total = subtotal + serviceFee + deliveryFee;
 
-    // Insert order
     const { data: orderRow, error: orderErr } = await supabase
       .from("orders")
       .insert({
@@ -708,7 +849,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     if (orderErr || !orderRow) throw new Error(orderErr?.message ?? "Failed to place order");
 
-    // Insert order items
     const items = cart.map((i) => ({
       order_id: orderRow.id,
       product_id: i.product.id,
@@ -875,7 +1015,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const addAddress = async (a: Omit<SavedAddress, "id">): Promise<SavedAddress> => {
     if (!user) throw new Error("Not authenticated");
 
-    // Unset other defaults if needed
     if (a.isDefault) {
       await supabase.from("saved_addresses").update({ is_default: false }).eq("user_id", user.id);
     }
@@ -967,13 +1106,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const app = applications.find((a) => a.id === id);
     if (!app) return;
 
-    // Update application status
     await supabase
       .from("partner_applications")
       .update({ status: "approved", reviewed_at: new Date().toISOString() })
       .eq("id", id);
 
-    // Create shop from application
     const categoryToId: Record<string, string> = {
       Restaurant: "food", "Fast Food": "fast-food",
       Grocery: "grocery", Pharmacy: "pharmacy", "Ice Cream": "ice-cream",
@@ -982,7 +1119,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const { data: shopData } = await supabase
       .from("shops")
       .insert({
-        owner_id: user!.id,   // admin owns it until partner account is linked
+        owner_id: user!.id,
         name: app.businessName,
         category: app.category,
         category_id: categoryToId[app.category] ?? "others",
@@ -1043,7 +1180,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const value = useMemo<AppContextValue>(
     () => ({
       user, session, currentView, authLoading,
-      signUp, signIn, verifyOtp, loginAsGuest, loginAsStaff, logout,
+      signUp, signIn, loginAsAdmin, loginAsGuest, loginAsStaff, logout,
       setCurrentView, canView, canPartner,
       shops, shopsLoading, toggleShopOpen,
       customerLoc, customerAddress, setCustomerAddress,
