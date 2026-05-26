@@ -1,1012 +1,1239 @@
-import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
-import { type ReactNode, useEffect, useState } from "react";
 import {
-  PERMISSION_LABELS,
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useCallback,
+  type ReactNode,
+} from "react";
+import { supabase } from "../lib/supabase";
+import type { Session } from "@supabase/supabase-js";
+import {
+  AWKA_CENTER,
+  DEFAULT_ALLOWED_VIEWS,
+  type CartItem,
+  type Order,
+  type PartnerApplication,
+  type PartnerPermission,
+  type PartnerStaff,
+  type PaymentMethod,
+  type Product,
+  type Rating,
+  type Rider,
   type RoleView,
+  type SavedAddress,
+  type Shop,
 } from "../utils/helpers";
-import { useApp } from "../context/AppContext";
 
-// ---------- Logo ----------
-export function Logo({ size = "md" }: { size?: "sm" | "md" | "lg" }) {
-  const sizes = { sm: "h-8 w-8 text-sm", md: "h-10 w-10 text-base", lg: "h-14 w-14 text-2xl" };
-  return (
-    <div className={`inline-flex items-center justify-center rounded-2xl bg-[#FF6B00] text-white font-extrabold shadow-lg shadow-orange-200 ${sizes[size]}`}>
-      I
-    </div>
-  );
-}
+// ─────────────────────────────────────────────
+// Admin PIN — change this or move to env var
+// ─────────────────────────────────────────────
+const ADMIN_PIN = import.meta.env.VITE_ADMIN_PIN ?? "instadal2024";
 
-// ---------- Back button ----------
-export function BackButton({ to, label = "Back" }: { to?: string; label?: string }) {
-  const nav = useNavigate();
-  return (
-    <button
-      onClick={() => (to ? nav(to) : nav(-1))}
-      className="inline-flex items-center gap-1 rounded-full bg-white/90 hover:bg-white border border-gray-200 px-3 py-1.5 text-xs font-bold text-gray-700 shadow-sm transition"
-      aria-label="Go back"
-    >
-      <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
-        <polyline points="15 18 9 12 15 6" />
-      </svg>
-      {label}
-    </button>
-  );
-}
+// ─────────────────────────────────────────────
+// Types
+// ─────────────────────────────────────────────
+export type User = {
+  id: string;
+  name: string;
+  phone: string;
+  primaryRole: RoleView;
+  allowedViews: RoleView[];
+  locationState?: string;
+  locationCity?: string;
+  partnerPermissions?: PartnerPermission[];
+  isStaffAccount?: boolean;
+  isGuest?: boolean;
+};
 
-// ---------- Top Navbar (customer) ----------
-export function Navbar() {
-  const { user, cart } = useApp();
-  return (
-    <header className="sticky top-0 z-30 bg-white/90 backdrop-blur border-b border-gray-100">
-      <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3">
-        <Link to={user ? "/customer" : "/"} className="flex items-center gap-2">
-          <Logo />
-          <div className="hidden sm:block">
-            <div className="font-extrabold text-[#1A1A1A] leading-none tracking-tight">INSTADAL</div>
-            <div className="text-[10px] text-gray-500 uppercase tracking-widest">Instant Delivery Always</div>
-          </div>
-        </Link>
-        <Link
-          to="/search"
-          className="flex-1 max-w-md hidden md:flex items-center gap-2 rounded-full border border-gray-200 bg-gray-50 px-4 py-2 text-sm text-gray-600 hover:bg-gray-100"
-        >
-          <svg className="h-4 w-4 text-[#FF6B00]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-          <span className="truncate">Search food, groceries, medicine...</span>
-        </Link>
-        <div className="flex items-center gap-2">
-          <Link
-            to="/search"
-            className="md:hidden flex h-10 w-10 items-center justify-center rounded-full bg-gray-100 hover:bg-orange-100 transition"
-            aria-label="Search"
-          >
-            <svg className="h-5 w-5 text-[#1A1A1A]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-          </Link>
-          <Link
-            to="/cart"
-            className="relative flex h-10 w-10 items-center justify-center rounded-full bg-gray-100 hover:bg-orange-100 transition"
-            aria-label="Cart"
-          >
-            <svg className="h-5 w-5 text-[#1A1A1A]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.7 13.4a2 2 0 0 0 2 1.6h9.7a2 2 0 0 0 2-1.6L23 6H6"/></svg>
-            {cart.length > 0 && (
-              <span className="absolute -top-1 -right-1 h-5 min-w-[20px] px-1 rounded-full bg-[#FF6B00] text-white text-[10px] font-bold flex items-center justify-center">
-                {cart.reduce((s, i) => s + i.quantity, 0)}
-              </span>
-            )}
-          </Link>
-          <Link
-            to={user?.isGuest ? "/" : user ? "/profile" : "/"}
-            className="hidden sm:flex h-10 items-center gap-2 rounded-full bg-gray-100 px-3 text-sm font-medium hover:bg-orange-100"
-          >
-            <div className="h-6 w-6 rounded-full bg-[#FF6B00] text-white text-xs font-bold flex items-center justify-center">
-              {(user?.name ?? "U").charAt(0)}
-            </div>
-            <span>{user?.isGuest ? "Sign up" : (user?.name ?? "Sign in")}</span>
-          </Link>
-        </div>
-      </div>
-      <RoleSwitcher />
-    </header>
-  );
-}
+type AppContextValue = {
+  // Auth
+  user: User | null;
+  session: Session | null;
+  currentView: RoleView;
+  authLoading: boolean;
 
-// ---------- Role switcher ----------
-export function RoleSwitcher() {
-  const { user, currentView, setCurrentView, logout } = useApp();
-  const nav = useNavigate();
-  const loc = useLocation();
+  signUp: (
+    name: string,
+    phone: string,
+    password: string,
+    primaryRole: RoleView,
+    locationState: string,
+    locationCity: string
+  ) => Promise<void>;
+  signIn: (phone: string, password: string) => Promise<RoleView>;
+  loginAsAdmin: (pin: string) => Promise<void>;
+  loginAsGuest: () => void;
+  loginAsStaff: (staff: PartnerStaff) => void;
+  logout: () => Promise<void>;
 
-  if (!user) return null;
+  setCurrentView: (v: RoleView) => void;
+  canView: (v: RoleView) => boolean;
+  canPartner: (p: PartnerPermission) => boolean;
 
-  if (user.isGuest) {
-    return (
-      <div className="border-t border-gray-100 bg-gradient-to-r from-orange-50 via-white to-green-50">
-        <div className="mx-auto max-w-6xl px-4 py-1.5 flex items-center justify-between text-xs">
-          <span className="text-gray-600">
-            <span className="font-bold text-[#1A1A1A]">👀 Guest mode</span>
-            <span className="ml-2 text-gray-500">Browse freely — sign up to place orders & track deliveries.</span>
-          </span>
-          <div className="flex items-center gap-2">
-            <button onClick={() => nav("/")} className="rounded-full bg-[#FF6B00] text-white px-3 py-1 font-bold">
-              Sign up free
-            </button>
-            <button onClick={() => { logout(); nav("/"); }} className="font-bold text-gray-500 hover:text-[#FF6B00]">
-              Exit
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  // Shops
+  shops: Shop[];
+  shopsLoading: boolean;
+  toggleShopOpen: (id: string) => Promise<void>;
 
-  const items: { r: RoleView; label: string; to: string; icon: string }[] = [
-    { r: "customer", label: "Customer", to: "/customer", icon: "🛍️" },
-    { r: "partner",  label: "Partner",  to: "/partner",  icon: "🏪" },
-    { r: "rider",    label: "Rider",    to: "/rider",    icon: "🛺" },
-    { r: "admin",    label: "Admin",    to: "/admin",    icon: "🛠️" },
-  ];
-  const visible = items.filter((i) => user.allowedViews.includes(i.r));
+  // Customer location
+  customerLoc: { lat: number; lng: number };
+  customerAddress: string;
+  setCustomerAddress: (a: string) => void;
 
-  if (visible.length <= 1 && !user.isStaffAccount) {
-    return (
-      <div className="border-t border-gray-100 bg-gradient-to-r from-orange-50 via-white to-green-50">
-        <div className="mx-auto max-w-6xl px-4 py-1.5 flex items-center justify-between text-xs">
-          <span className="text-gray-500">
-            Signed in as <span className="font-bold text-[#1A1A1A] capitalize">{user.primaryRole}</span>
-            {user.isStaffAccount && <span className="ml-1 text-[#FF6B00]">· Staff</span>}
-          </span>
-          <button onClick={() => { logout(); nav("/"); }} className="font-bold text-gray-500 hover:text-[#FF6B00]">
-            Sign out
-          </button>
-        </div>
-      </div>
-    );
-  }
+  // Cart
+  cart: CartItem[];
+  addToCart: (p: Product) => void;
+  removeFromCart: (pid: string) => void;
+  updateQty: (pid: string, qty: number) => void;
+  clearCart: () => void;
 
-  return (
-    <div className="border-t border-gray-100 bg-gradient-to-r from-orange-50 via-white to-green-50">
-      <div className="mx-auto max-w-6xl px-4 py-1.5 flex items-center justify-between gap-2 text-xs">
-        <div className="flex items-center gap-2 text-gray-500">
-          <span className="hidden sm:inline">View as:</span>
-          <span className="font-bold text-[#1A1A1A] capitalize">{user.name.split(" ")[0]}</span>
-          {user.isStaffAccount && (
-            <span className="rounded-full bg-orange-100 text-[#FF6B00] px-2 py-0.5 font-bold">Staff</span>
-          )}
-        </div>
-        <div className="flex items-center gap-1">
-          {visible.map((it) => (
-            <button
-              key={it.r}
-              onClick={() => {
-                setCurrentView(it.r);
-                if (!loc.pathname.startsWith("/" + it.r)) nav(it.to);
-              }}
-              className={`px-2.5 py-1 rounded-full font-semibold transition flex items-center gap-1 ${
-                currentView === it.r
-                  ? "bg-[#FF6B00] text-white shadow"
-                  : "text-gray-600 hover:bg-white"
-              }`}
-            >
-              <span>{it.icon}</span>
-              <span className="hidden sm:inline">{it.label}</span>
-            </button>
-          ))}
-          <button
-            onClick={() => { logout(); nav("/"); }}
-            className="ml-1 px-2.5 py-1 rounded-full text-gray-500 hover:bg-white font-semibold"
-            title="Sign out"
-          >
-            ⎋
-          </button>
-        </div>
-      </div>
-      {currentView === "partner" && user.isStaffAccount && user.partnerPermissions && (
-        <div className="border-t border-orange-100 bg-orange-50/50">
-          <div className="mx-auto max-w-6xl px-4 py-1 text-[11px] text-[#FF6B00] font-semibold">
-            Staff access: {user.partnerPermissions.map((p) => PERMISSION_LABELS[p]).join(" · ")}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
+  // Orders
+  orders: Order[];
+  ordersLoading: boolean;
+  placeOrder: (address: string, lat: number, lng: number, phone: string) => Promise<Order>;
+  updateOrderStatus: (id: string, status: Order["status"], patch?: Partial<Order>) => Promise<void>;
+  assignRider: (orderId: string, riderId: string) => Promise<void>;
 
-// ---------- Bottom nav ----------
-export function BottomNav() {
-  const items = [
-    { to: "/customer", icon: "home",    label: "Home"    },
-    { to: "/search",   icon: "search",  label: "Search"  },
-    { to: "/orders",   icon: "orders",  label: "Orders"  },
-    { to: "/profile",  icon: "profile", label: "Profile" },
-  ];
-  return (
-    <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-gray-100 shadow-[0_-4px_20px_-8px_rgba(0,0,0,0.1)]">
-      <div className="grid grid-cols-4">
-        {items.map((it) => (
-          <NavLink
-            key={it.to}
-            to={it.to}
-            end={it.to === "/customer"}
-            className={({ isActive }) =>
-              `flex flex-col items-center justify-center gap-0.5 py-2.5 text-[11px] font-medium transition ${
-                isActive ? "text-[#FF6B00]" : "text-gray-500"
-              }`
-            }
-          >
-            <BottomIcon name={it.icon} />
-            {it.label}
-          </NavLink>
-        ))}
-      </div>
-    </nav>
-  );
-}
+  // Riders
+  riders: Rider[];
+  toggleRiderAvailability: (id: string) => Promise<void>;
+  updateRiderLocation: (id: string, lat: number, lng: number) => Promise<void>;
 
-function BottomIcon({ name }: { name: string }) {
-  const common = "h-5 w-5";
-  if (name === "home")
-    return <svg className={common} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>;
-  if (name === "search")
-    return <svg className={common} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>;
-  if (name === "orders")
-    return <svg className={common} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>;
-  return <svg className={common} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>;
-}
+  // Partner staff
+  partnerStaff: PartnerStaff[];
+  addStaff: (name: string, phone: string, permissions: PartnerPermission[]) => Promise<PartnerStaff>;
+  updateStaffPermissions: (id: string, permissions: PartnerPermission[]) => Promise<void>;
+  removeStaff: (id: string) => Promise<void>;
 
-// ---------- ShopCard ----------
-export function ShopCard({
-  shop, distance, onClick,
-}: {
-  shop: { id: string; name: string; category: string; logo: string; rating: number; prepTime: string; isOpen: boolean; description: string };
-  distance?: number;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className="card-lift w-full text-left rounded-2xl bg-white border border-gray-100 overflow-hidden shadow-sm"
-    >
-      <div className="relative h-32 bg-gradient-to-br from-orange-100 via-orange-50 to-amber-50 flex items-center justify-center text-6xl">
-        {shop.logo}
-        {!shop.isOpen && (
-          <div className="absolute inset-0 bg-black/50 text-white flex items-center justify-center font-semibold">
-            Closed
-          </div>
-        )}
-        {distance !== undefined && (
-          <span className="absolute top-2 right-2 rounded-full bg-white/90 backdrop-blur px-2 py-0.5 text-[11px] font-semibold text-gray-700">
-            {distance.toFixed(1)} km
-          </span>
-        )}
-      </div>
-      <div className="p-3">
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0">
-            <h3 className="font-bold text-[15px] truncate">{shop.name}</h3>
-            <p className="text-xs text-gray-500 truncate">{shop.category} · {shop.prepTime}</p>
-          </div>
-          <span className="inline-flex items-center gap-0.5 text-xs font-semibold bg-gray-100 px-1.5 py-0.5 rounded">
-            ⭐ {shop.rating.toFixed(1)}
-          </span>
-        </div>
-        <p className="mt-1 text-[11px] text-gray-500 line-clamp-2">{shop.description}</p>
-      </div>
-    </button>
-  );
-}
+  // Ratings
+  ratings: Rating[];
+  submitRating: (
+    targetType: "shop" | "product",
+    targetId: string,
+    score: number,
+    comment?: string
+  ) => Promise<void>;
 
-// ---------- ProductCard ----------
-export function ProductCard({
-  product, onAdd, shopName,
-}: {
-  product: { id: string; name: string; description: string; price: number; image: string; category: string; isAvailable: boolean };
-  onAdd: () => void;
-  shopName?: string;
-}) {
-  return (
-    <div className="card-lift flex gap-3 rounded-2xl bg-white border border-gray-100 p-3 shadow-sm">
-      <div className="h-20 w-20 flex-shrink-0 rounded-xl bg-gradient-to-br from-orange-100 to-amber-50 flex items-center justify-center text-3xl">
-        {product.image}
-      </div>
-      <div className="flex-1 min-w-0">
-        {shopName && <div className="text-[11px] font-bold text-[#FF6B00]">{shopName}</div>}
-        <h4 className="font-bold text-sm truncate">{product.name}</h4>
-        <p className="text-xs text-gray-500 line-clamp-2">{product.description}</p>
-        <div className="mt-2 flex items-center justify-between">
-          <span className="font-extrabold text-[#1A1A1A]">₦{product.price.toLocaleString()}</span>
-          <button
-            onClick={onAdd}
-            className="rounded-full bg-[#FF6B00] px-3 py-1.5 text-xs font-bold text-white hover:bg-[#E55A00] transition"
-          >
-            + Add
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
+  // Saved addresses
+  savedAddresses: SavedAddress[];
+  addAddress: (a: Omit<SavedAddress, "id">) => Promise<SavedAddress>;
+  updateAddress: (id: string, patch: Partial<SavedAddress>) => Promise<void>;
+  removeAddress: (id: string) => Promise<void>;
+  setDefaultAddress: (id: string) => Promise<void>;
 
-// ---------- Modal ----------
-export function Modal({
-  open, onClose, title, children,
-}: {
-  open: boolean;
-  onClose: () => void;
-  title?: string;
-  children: ReactNode;
-}) {
-  if (!open) return null;
-  return (
-    <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/50 p-0 md:p-4" onClick={onClose}>
-      <div
-        className="w-full max-w-md rounded-t-3xl md:rounded-3xl bg-white shadow-2xl max-h-[90vh] overflow-auto"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {title && (
-          <div className="sticky top-0 z-10 bg-white border-b border-gray-100 px-5 py-4 flex items-center justify-between">
-            <h3 className="font-bold text-lg">{title}</h3>
-            <button onClick={onClose} className="h-8 w-8 rounded-full bg-gray-100 hover:bg-gray-200 grid place-items-center">
-              ✕
-            </button>
-          </div>
-        )}
-        <div className="p-5">{children}</div>
-      </div>
-    </div>
-  );
-}
+  // Partner applications
+  applications: PartnerApplication[];
+  submitApplication: (
+    a: Omit<PartnerApplication, "id" | "status" | "createdAt">
+  ) => Promise<PartnerApplication>;
+  approveApplication: (id: string) => Promise<void>;
+  rejectApplication: (id: string, reason?: string) => Promise<void>;
 
-// ---------- Toast ----------
-export function ToastHost() {
-  const { toast } = useApp();
-  if (!toast) return null;
-  return (
-    <div className="fixed bottom-20 md:bottom-6 left-1/2 -translate-x-1/2 z-[60] rounded-full bg-[#1A1A1A] text-white px-4 py-2 text-sm font-medium shadow-xl">
-      {toast}
-    </div>
-  );
-}
+  // Location selector
+  selectedState: string;
+  selectedCity: string;
+  setLocation: (state: string, city: string) => void;
 
-// ---------- Auth page — no OTP ----------
-export function AuthPage() {
-  const {
-    signUp,
-    signIn,
-    loginAsAdmin,
-    loginAsGuest,
-    loginAsStaff,
-    partnerStaff,
-    showToast,
-  } = useApp();
+  // Payment method
+  paymentMethod: PaymentMethod;
+  setPaymentMethod: (m: PaymentMethod) => void;
 
-  const nav = useNavigate();
+  // Toast
+  toast: string | null;
+  showToast: (msg: string) => void;
+};
 
-  const [mode, setMode] = useState<"signup" | "signin">("signup");
-
-  // signup
-  const [primaryRole, setPrimaryRole] = useState<RoleView>("customer");
-  const [name, setName] = useState("");
-  const [locationState, setLocationState] = useState("");
-  const [locationCity, setLocationCity] = useState("");
-  const [locationOpen, setLocationOpen] = useState(false);
-  const [signupPhone, setSignupPhone] = useState("");
-  const [signupPassword, setSignupPassword] = useState("");
-  const [signupShowPw, setSignupShowPw] = useState(false);
-  const [signupLoading, setSignupLoading] = useState(false);
-  const [signupError, setSignupError] = useState("");
-
-  // signin
-  const [siPhone, setSiPhone] = useState("");
-  const [siPassword, setSiPassword] = useState("");
-  const [siShowPw, setSiShowPw] = useState(false);
-  const [siLoading, setSiLoading] = useState(false);
-  const [siError, setSiError] = useState("");
-
-  // admin PIN
-  const [adminPinMode, setAdminPinMode] = useState(false);
-  const [adminPin, setAdminPin] = useState("");
-  const [adminShowPin, setAdminShowPin] = useState(false);
-  const [adminLoading, setAdminLoading] = useState(false);
-  const [adminError, setAdminError] = useState("");
-
-  // staff
-  const [staffPhone, setStaffPhone] = useState("");
-  const [staffError, setStaffError] = useState("");
-
-  const roleOptions: { r: Exclude<RoleView, "admin">; icon: string; title: string; sub: string; gradient: string }[] = [
-    { r: "customer", icon: "🛍️", title: "Customer", sub: "Order anything, delivered fast",  gradient: "from-orange-500 to-amber-500"  },
-    { r: "partner",  icon: "🏪", title: "Partner",  sub: "Grow your business on Instadal", gradient: "from-emerald-500 to-teal-500"  },
-    { r: "rider",    icon: "🛺", title: "Rider",    sub: "Earn delivering on your keke",    gradient: "from-sky-500 to-blue-500"      },
-  ];
-
-  const resetSignup = () => {
-    setName(""); setLocationState(""); setLocationCity("");
-    setSignupPhone(""); setSignupPassword(""); setSignupError("");
+// ─────────────────────────────────────────────
+// DB row → app type mappers
+// ─────────────────────────────────────────────
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function rowToShop(r: any): Shop {
+  return {
+    id: r.id,
+    name: r.name,
+    category: r.category,
+    categoryId: r.category_id,
+    description: r.description ?? "",
+    address: r.address,
+    state: r.state,
+    city: r.city,
+    lat: r.lat,
+    lng: r.lng,
+    logo: r.logo ?? "🏪",
+    rating: Number(r.rating ?? 0),
+    prepTime: r.prep_time ?? "20-30 min",
+    isOpen: r.is_open,
+    isApproved: r.is_approved,
+    isMall: r.is_mall,
+    itemCount: r.item_count,
+    featured: r.featured,
+    ownerId: r.owner_id,
   };
-  const resetSignin = () => {
-    setSiPhone(""); setSiPassword(""); setSiError("");
-    setAdminPinMode(false); setAdminPin(""); setAdminError("");
-  };
+}
 
-  const handleSiPhoneChange = (val: string) => {
-    setSiPhone(val);
-    setSiError("");
-    if (val.trim().toLowerCase() === "admin") {
-      setAdminPinMode(true);
-      setAdminPin("");
-      setAdminError("");
-    } else {
-      setAdminPinMode(false);
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function rowToOrder(r: any): Order {
+  return {
+    id: r.id,
+    customerId: r.customer_id,
+    customerName: r.customer_name,
+    customerPhone: r.customer_phone,
+    shopId: r.shop_id,
+    shopName: r.shop_name,
+    shopLat: r.shop_lat,
+    shopLng: r.shop_lng,
+    riderId: r.rider_id ?? undefined,
+    riderName: r.rider_name ?? undefined,
+    riderLat: r.rider_lat ?? undefined,
+    riderLng: r.rider_lng ?? undefined,
+    items: r.order_items?.map(rowToCartItem) ?? [],
+    subtotal: Number(r.subtotal),
+    serviceFee: Number(r.service_fee),
+    deliveryFee: Number(r.delivery_fee),
+    total: Number(r.total),
+    deliveryAddress: r.delivery_address,
+    deliveryLat: r.delivery_lat,
+    deliveryLng: r.delivery_lng,
+    status: r.status,
+    paymentMethod: r.payment_method ?? undefined,
+    createdAt: new Date(r.created_at).getTime(),
+    deliveredAt: r.delivered_at ? new Date(r.delivered_at).getTime() : undefined,
+  };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function rowToCartItem(r: any): CartItem {
+  return {
+    product: {
+      id: r.product_id ?? r.id,
+      shopId: "",
+      name: r.name,
+      description: "",
+      price: Number(r.price),
+      image: r.image ?? "",
+      category: "",
+      isAvailable: true,
+    },
+    quantity: r.quantity,
+  };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function rowToRider(r: any): Rider {
+  return {
+    id: r.id,
+    name: r.profiles?.name ?? "Rider",
+    phone: r.phone ?? r.profiles?.phone ?? "",
+    vehicleType: r.vehicle_type,
+    isAvailable: r.is_available,
+    lat: r.lat ?? AWKA_CENTER.lat,
+    lng: r.lng ?? AWKA_CENTER.lng,
+    totalEarnings: Number(r.total_earnings ?? 0),
+    deliveriesToday: r.deliveries_today ?? 0,
+  };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function rowToStaff(r: any): PartnerStaff {
+  return {
+    id: r.id,
+    name: r.name,
+    phone: r.phone,
+    permissions: r.permissions ?? [],
+    createdAt: new Date(r.created_at).getTime(),
+  };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function rowToRating(r: any): Rating {
+  return {
+    id: r.id,
+    userId: r.user_id,
+    userName: r.user_name,
+    targetType: r.target_type,
+    targetId: r.target_id,
+    score: r.score,
+    comment: r.comment ?? undefined,
+    createdAt: new Date(r.created_at).getTime(),
+  };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function rowToAddress(r: any): SavedAddress {
+  return {
+    id: r.id,
+    label: r.label,
+    address: r.address,
+    mapsLink: r.maps_link ?? undefined,
+    lat: r.lat ?? undefined,
+    lng: r.lng ?? undefined,
+    isDefault: r.is_default,
+  };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function rowToApplication(r: any): PartnerApplication {
+  return {
+    id: r.id,
+    businessName: r.business_name,
+    ownerName: r.owner_name,
+    phone: r.phone,
+    email: r.email ?? "",
+    state: r.state,
+    city: r.city,
+    address: r.address,
+    category: r.category,
+    description: r.description ?? "",
+    videoLink: r.video_link ?? "",
+    previewProducts: r.preview_products ?? [],
+    status: r.status,
+    createdAt: new Date(r.created_at).getTime(),
+    reviewedAt: r.reviewed_at ? new Date(r.reviewed_at).getTime() : undefined,
+    rejectionReason: r.rejection_reason ?? undefined,
+  };
+}
+
+// ─────────────────────────────────────────────
+// Context
+// ─────────────────────────────────────────────
+const AppContext = createContext<AppContextValue | null>(null);
+
+const CART_KEY = "instadal_cart";
+
+export function AppProvider({ children }: { children: ReactNode }) {
+  // ── Auth ──────────────────────────────────
+  const [session, setSession] = useState<Session | null>(null);
+  const [user, setUser] = useState<User | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [currentView, setCurrentViewState] = useState<RoleView>("customer");
+
+  // ── Data ──────────────────────────────────
+  const [shops, setShops] = useState<Shop[]>([]);
+  const [shopsLoading, setShopsLoading] = useState(true);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [ordersLoading, setOrdersLoading] = useState(false);
+  const [riders, setRiders] = useState<Rider[]>([]);
+  const [partnerStaff, setPartnerStaff] = useState<PartnerStaff[]>([]);
+  const [ratings, setRatings] = useState<Rating[]>([]);
+  const [savedAddresses, setSavedAddresses] = useState<SavedAddress[]>([]);
+  const [applications, setApplications] = useState<PartnerApplication[]>([]);
+
+  // ── Client-side only ──────────────────────
+  const [cart, setCart] = useState<CartItem[]>(() => {
+    try { return JSON.parse(localStorage.getItem(CART_KEY) ?? "[]"); }
+    catch { return []; }
+  });
+  const customerLoc = AWKA_CENTER;
+  const [customerAddress, setCustomerAddress] = useState("UNIZIK Main Gate, Awka");
+  const [selectedState, setSelectedState] = useState(
+    () => localStorage.getItem("instadal_state") ?? "Anambra"
+  );
+  const [selectedCity, setSelectedCity] = useState(
+    () => localStorage.getItem("instadal_city") ?? "Awka"
+  );
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(
+    () => (localStorage.getItem("instadal_payment") as PaymentMethod) ?? "card"
+  );
+
+  // ── Toast ─────────────────────────────────
+  const [toast, setToast] = useState<string | null>(null);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const showToast = useCallback((msg: string) => {
+    setToast(msg);
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToast(null), 2500);
+  }, []);
+
+  // ─────────────────────────────────────────
+  // Bootstrap auth session on mount
+  // ─────────────────────────────────────────
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      if (session) loadProfile(session.user.id);
+      else setAuthLoading(false);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+      if (session) loadProfile(session.user.id);
+      else {
+        setUser(null);
+        setCurrentViewState("customer");
+        setAuthLoading(false);
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const loadProfile = async (uid: string) => {
+    const { data } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("id", uid)
+      .single();
+
+    if (data) {
+      const role = data.primary_role as RoleView;
+      const u: User = {
+        id: data.id,
+        name: data.name,
+        phone: data.phone ?? "",
+        primaryRole: role,
+        allowedViews: DEFAULT_ALLOWED_VIEWS[role],
+        locationState: data.location_state ?? undefined,
+        locationCity: data.location_city ?? undefined,
+      };
+      setUser(u);
+      setCurrentViewState(role);
+      // Sync location selection to user's saved location
+      if (data.location_state) setSelectedState(data.location_state);
+      if (data.location_city) setSelectedCity(data.location_city);
     }
+    setAuthLoading(false);
   };
 
-  const handleSignUp = async () => {
-    setSignupError("");
-    if (!name.trim())            { setSignupError("Please enter your name");            return; }
-    if (!locationState)          { setSignupError("Please choose your location");        return; }
-    if (!locationCity)           { setSignupError("Please choose your city");            return; }
-    if (!signupPhone.trim())     { setSignupError("Please enter your phone number");     return; }
-    if (signupPassword.trim().length < 6) { setSignupError("Password must be at least 6 characters"); return; }
-    setSignupLoading(true);
-    try {
-      await signUp(name.trim(), signupPhone.trim(), signupPassword.trim(), primaryRole, locationState, locationCity);
-      showToast(`Welcome to Instadal, ${name.split(" ")[0]}! 🎉`);
-      nav("/" + primaryRole);
-    } catch (e: unknown) {
-      setSignupError(e instanceof Error ? e.message : "Sign up failed. Try again.");
-    } finally {
-      setSignupLoading(false);
-    }
+  // ─────────────────────────────────────────
+  // Load shops on mount
+  // ─────────────────────────────────────────
+  useEffect(() => {
+    const fetchShops = async () => {
+      setShopsLoading(true);
+      const { data, error } = await supabase
+        .from("shops")
+        .select("*")
+        .eq("is_approved", true)
+        .order("featured", { ascending: false });
+
+      if (!error && data) setShops(data.map(rowToShop));
+      setShopsLoading(false);
+    };
+    fetchShops();
+  }, []);
+
+  // ─────────────────────────────────────────
+  // Load orders when user changes
+  // ─────────────────────────────────────────
+  useEffect(() => {
+    if (!user || user.isGuest) return;
+    fetchOrders();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
+
+  const fetchOrders = async () => {
+    if (!user) return;
+    setOrdersLoading(true);
+    let query = supabase
+      .from("orders")
+      .select("*, order_items(*)")
+      .order("created_at", { ascending: false });
+
+    if (user.primaryRole === "customer") query = query.eq("customer_id", user.id);
+    else if (user.primaryRole === "rider") query = query.eq("rider_id", user.id);
+
+    const { data, error } = await query;
+    if (!error && data) setOrders(data.map(rowToOrder));
+    setOrdersLoading(false);
   };
 
-  const handleSignIn = async () => {
-    setSiError("");
-    if (!siPhone.trim())    { setSiError("Please enter your phone number"); return; }
-    if (!siPassword.trim()) { setSiError("Please enter your password");     return; }
-    setSiLoading(true);
-    try {
-      const role = await signIn(siPhone.trim(), siPassword.trim());
-      nav("/" + role);
-    } catch (e: unknown) {
-      setSiError(e instanceof Error ? e.message : "Incorrect phone or password.");
-    } finally {
-      setSiLoading(false);
-    }
-  };
+  // ─────────────────────────────────────────
+  // Load riders (admin / partner)
+  // ─────────────────────────────────────────
+  useEffect(() => {
+    if (!user || (user.primaryRole !== "admin" && user.primaryRole !== "partner")) return;
+    supabase
+      .from("riders")
+      .select("*, profiles(name, phone)")
+      .then(({ data }) => {
+        if (data) setRiders(data.map(rowToRider));
+      });
+  }, [user?.primaryRole]);
 
-  const handleAdminPin = async () => {
-    setAdminError("");
-    if (!adminPin.trim()) { setAdminError("Enter your admin PIN"); return; }
-    setAdminLoading(true);
-    try {
-      await loginAsAdmin(adminPin.trim());
-      nav("/admin");
-    } catch (e: unknown) {
-      setAdminError(e instanceof Error ? e.message : "Incorrect PIN.");
-    } finally {
-      setAdminLoading(false);
-    }
-  };
+  // ─────────────────────────────────────────
+  // Load partner staff
+  // ─────────────────────────────────────────
+  useEffect(() => {
+    if (!user || (user.primaryRole !== "partner" && user.primaryRole !== "admin")) return;
+    supabase
+      .from("shops")
+      .select("id")
+      .eq("owner_id", user.id)
+      .single()
+      .then(({ data: shopRow }) => {
+        if (!shopRow) return;
+        supabase
+          .from("partner_staff")
+          .select("*")
+          .eq("shop_id", shopRow.id)
+          .then(({ data }) => {
+            if (data) setPartnerStaff(data.map(rowToStaff));
+          });
+      });
+  }, [user?.id, user?.primaryRole]);
 
-  const staffSignIn = () => {
-    const found = partnerStaff.find(
-      (s) => s.phone.replace(/\s+/g, "") === staffPhone.replace(/\s+/g, "")
-    );
-    if (!found) { setStaffError("Phone not found. Ask your partner to add you first."); return; }
-    setStaffError("");
-    loginAsStaff(found);
-    nav("/partner/orders");
-  };
+  // ─────────────────────────────────────────
+  // Load ratings
+  // ─────────────────────────────────────────
+  useEffect(() => {
+    supabase.from("ratings").select("*").then(({ data }) => {
+      if (data) setRatings(data.map(rowToRating));
+    });
+  }, []);
 
-  return (
-    <div className="min-h-screen bg-[#FAFAFA]">
-      <div className="relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-orange-100 via-white to-amber-50" />
-        <div className="absolute -top-32 -right-32 h-80 w-80 rounded-full bg-orange-200/60 blur-3xl" />
-        <div className="absolute -bottom-24 -left-24 h-72 w-72 rounded-full bg-green-200/60 blur-3xl" />
-        <div className="relative mx-auto max-w-6xl px-4 pt-12 pb-6 text-center">
-          <div className="flex justify-center mb-4"><Logo size="lg" /></div>
-          <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight text-[#1A1A1A]">INSTADAL</h1>
-          <p className="mt-1 text-xs md:text-sm font-semibold tracking-[0.3em] uppercase text-[#FF6B00]">
-            Instant Delivery Always
-          </p>
-          <p className="mt-4 max-w-xl mx-auto text-gray-600">
-            Food, groceries, ice cream & pharmacy — delivered across Awka in minutes.
-          </p>
-        </div>
-      </div>
+  // ─────────────────────────────────────────
+  // Load saved addresses
+  // ─────────────────────────────────────────
+  useEffect(() => {
+    if (!user || user.isGuest) return;
+    supabase
+      .from("saved_addresses")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("created_at")
+      .then(({ data }) => {
+        if (data) setSavedAddresses(data.map(rowToAddress));
+      });
+  }, [user?.id]);
 
-      <div className="mx-auto max-w-md px-4 -mt-2 pb-16">
-        <div className="rounded-3xl bg-white border border-gray-100 shadow-xl overflow-hidden">
+  // ─────────────────────────────────────────
+  // Load partner applications (admin)
+  // ─────────────────────────────────────────
+  useEffect(() => {
+    if (user?.primaryRole !== "admin") return;
+    supabase
+      .from("partner_applications")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .then(({ data }) => {
+        if (data) setApplications(data.map(rowToApplication));
+      });
+  }, [user?.primaryRole]);
 
-          {/* Tab switcher */}
-          <div className="grid grid-cols-2 bg-gray-50 p-1 m-3 rounded-full">
-            <button
-              onClick={() => { setMode("signup"); resetSignin(); }}
-              className={`py-2 text-sm font-bold rounded-full transition ${mode === "signup" ? "bg-white shadow text-[#1A1A1A]" : "text-gray-500"}`}
-            >
-              Sign up
-            </button>
-            <button
-              onClick={() => { setMode("signin"); resetSignup(); }}
-              className={`py-2 text-sm font-bold rounded-full transition ${mode === "signin" ? "bg-white shadow text-[#1A1A1A]" : "text-gray-500"}`}
-            >
-              Sign in
-            </button>
-          </div>
+  // ─────────────────────────────────────────
+  // Realtime: orders channel
+  // ─────────────────────────────────────────
+  useEffect(() => {
+    if (!user || user.isGuest) return;
+    const channel = supabase
+      .channel("orders-changes")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "orders" },
+        () => { fetchOrders(); }
+      )
+      .subscribe();
 
-          <div className="p-5">
-            {mode === "signup" ? (
-              <>
-                <h2 className="text-lg font-extrabold">Join as...</h2>
-                <p className="text-sm text-gray-500">Pick how you'll use Instadal</p>
+    return () => { supabase.removeChannel(channel); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
 
-                <div className="mt-4 grid grid-cols-2 gap-2">
-                  {roleOptions.map((o) => (
-                    <button
-                      key={o.r}
-                      onClick={() => setPrimaryRole(o.r)}
-                      className={`text-left rounded-2xl p-3 border-2 transition ${
-                        primaryRole === o.r ? "border-[#FF6B00] bg-orange-50" : "border-gray-100 bg-white hover:border-gray-200"
-                      }`}
-                    >
-                      <div className={`h-10 w-10 rounded-xl bg-gradient-to-br ${o.gradient} text-white grid place-items-center text-xl shadow`}>
-                        {o.icon}
-                      </div>
-                      <div className="mt-2 font-bold text-sm">{o.title}</div>
-                      <div className="text-[11px] text-gray-500 leading-tight">{o.sub}</div>
-                    </button>
-                  ))}
-                </div>
-
-                <div className="mt-5">
-                  <label className="text-xs font-bold text-gray-500">Full name</label>
-                  <input
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="Ada Obi"
-                    className="mt-1 w-full rounded-xl border border-gray-200 bg-gray-50 p-3 text-sm outline-none focus:border-[#FF6B00] focus:bg-white"
-                  />
-                </div>
-
-                <div className="mt-3">
-                  <label className="text-xs font-bold text-gray-500">Location</label>
-                  <button
-                    onClick={() => setLocationOpen(true)}
-                    className={`mt-1 w-full rounded-xl border p-3 text-sm text-left transition flex items-center justify-between ${
-                      locationState
-                        ? "border-[#FF6B00] bg-orange-50 text-[#1A1A1A] font-medium"
-                        : "border-gray-200 bg-gray-50 text-gray-400"
-                    }`}
-                  >
-                    <span>{locationState && locationCity ? `📍 ${locationCity}, ${locationState}` : "Choose your state & city"}</span>
-                    <svg className="h-4 w-4 text-gray-400 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                      <polyline points="6 9 12 15 18 9" />
-                    </svg>
-                  </button>
-                </div>
-
-                <div className="mt-3">
-                  <label className="text-xs font-bold text-gray-500">Phone number</label>
-                  <input
-                    value={signupPhone}
-                    onChange={(e) => setSignupPhone(e.target.value)}
-                    placeholder="080xxxxxxxx"
-                    inputMode="tel"
-                    className="mt-1 w-full rounded-xl border border-gray-200 bg-gray-50 p-3 text-sm outline-none focus:border-[#FF6B00] focus:bg-white"
-                  />
-                </div>
-
-                <div className="mt-3">
-                  <label className="text-xs font-bold text-gray-500">Password</label>
-                  <div className="relative mt-1">
-                    <input
-                      type={signupShowPw ? "text" : "password"}
-                      value={signupPassword}
-                      onChange={(e) => setSignupPassword(e.target.value)}
-                      placeholder="At least 6 characters"
-                      className="w-full rounded-xl border border-gray-200 bg-gray-50 p-3 pr-16 text-sm outline-none focus:border-[#FF6B00] focus:bg-white"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setSignupShowPw((v) => !v)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-400 hover:text-[#FF6B00]"
-                    >
-                      {signupShowPw ? "Hide" : "Show"}
-                    </button>
-                  </div>
-                </div>
-
-                {signupError && <p className="mt-2 text-xs text-red-600">{signupError}</p>}
-
-                <button
-                  onClick={handleSignUp}
-                  disabled={signupLoading}
-                  className="mt-5 w-full rounded-full bg-[#FF6B00] text-white py-3 font-extrabold shadow-lg shadow-orange-200 hover:bg-[#E55A00] disabled:opacity-60 transition"
-                >
-                  {signupLoading ? "Creating account..." : `Create ${roleOptions.find((o) => o.r === primaryRole)?.title} account →`}
-                </button>
-
-                <div className="my-3 flex items-center gap-2 text-[11px] text-gray-400">
-                  <div className="flex-1 h-px bg-gray-200" /><span>or</span><div className="flex-1 h-px bg-gray-200" />
-                </div>
-
-                <button
-                  onClick={() => { loginAsGuest(); nav("/customer"); }}
-                  className="w-full rounded-full border-2 border-gray-200 bg-white py-3 text-sm font-extrabold text-gray-700 hover:border-[#FF6B00] hover:text-[#FF6B00] transition"
-                >
-                  👀 Browse as guest
-                </button>
-
-                <div className="mt-3 text-center text-xs text-gray-400">
-                  By continuing you agree to our Terms & Privacy Policy.
-                </div>
-              </>
-            ) : (
-              <>
-                {adminPinMode ? (
-                  <>
-                    <div className="text-center mb-5">
-                      <div className="text-3xl">🛠️</div>
-                      <h2 className="text-lg font-extrabold mt-2">Admin access</h2>
-                      <p className="text-sm text-gray-500 mt-1">Enter your admin PIN to continue</p>
-                    </div>
-
-                    <label className="text-xs font-bold text-gray-500">Admin PIN</label>
-                    <div className="relative mt-1">
-                      <input
-                        value={adminPin}
-                        onChange={(e) => { setAdminPin(e.target.value); setAdminError(""); }}
-                        onKeyDown={(e) => e.key === "Enter" && handleAdminPin()}
-                        type={adminShowPin ? "text" : "password"}
-                        placeholder="••••••"
-                        autoFocus
-                        className="w-full rounded-xl border border-gray-200 bg-gray-50 p-3 pr-16 text-sm outline-none focus:border-[#FF6B00] focus:bg-white tracking-widest font-bold"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setAdminShowPin((v) => !v)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-xs font-bold"
-                      >
-                        {adminShowPin ? "Hide" : "Show"}
-                      </button>
-                    </div>
-
-                    {adminError && <p className="mt-2 text-xs text-red-600">{adminError}</p>}
-
-                    <button
-                      onClick={handleAdminPin}
-                      disabled={adminLoading}
-                      className="mt-4 w-full rounded-full bg-[#1A1A1A] text-white py-3 font-extrabold hover:bg-[#FF6B00] transition disabled:opacity-60"
-                    >
-                      {adminLoading ? "Checking..." : "Enter Admin →"}
-                    </button>
-
-                    <button
-                      onClick={() => { setAdminPinMode(false); setSiPhone(""); setAdminPin(""); setAdminError(""); }}
-                      className="mt-3 w-full text-sm text-gray-500 hover:text-[#FF6B00] transition"
-                    >
-                      ← Back
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <h2 className="text-lg font-extrabold">Welcome back</h2>
-                    <p className="text-sm text-gray-500">Sign in to your account</p>
-
-                    <div className="mt-4">
-                      <label className="text-xs font-bold text-gray-500">Phone number</label>
-                      <input
-                        value={siPhone}
-                        onChange={(e) => handleSiPhoneChange(e.target.value)}
-                        placeholder="080xxxxxxxx"
-                        inputMode="tel"
-                        className="mt-1 w-full rounded-xl border border-gray-200 bg-gray-50 p-3 text-sm outline-none focus:border-[#FF6B00] focus:bg-white"
-                      />
-                    </div>
-
-                    <div className="mt-3">
-                      <label className="text-xs font-bold text-gray-500">Password</label>
-                      <div className="relative mt-1">
-                        <input
-                          value={siPassword}
-                          onChange={(e) => { setSiPassword(e.target.value); setSiError(""); }}
-                          onKeyDown={(e) => e.key === "Enter" && handleSignIn()}
-                          type={siShowPw ? "text" : "password"}
-                          placeholder="••••••••"
-                          className="w-full rounded-xl border border-gray-200 bg-gray-50 p-3 pr-16 text-sm outline-none focus:border-[#FF6B00] focus:bg-white"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setSiShowPw((v) => !v)}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-400 hover:text-gray-600"
-                        >
-                          {siShowPw ? "Hide" : "Show"}
-                        </button>
-                      </div>
-                    </div>
-
-                    {siError && <p className="mt-2 text-xs text-red-600">{siError}</p>}
-
-                    <button
-                      onClick={handleSignIn}
-                      disabled={siLoading}
-                      className="mt-5 w-full rounded-full bg-[#FF6B00] text-white py-3 font-extrabold shadow-lg shadow-orange-200 hover:bg-[#E55A00] transition disabled:opacity-60"
-                    >
-                      {siLoading ? "Signing in..." : "Sign in →"}
-                    </button>
-
-                    <div className="my-4 flex items-center gap-2 text-[11px] text-gray-400">
-                      <div className="flex-1 h-px bg-gray-200" /><span>or</span><div className="flex-1 h-px bg-gray-200" />
-                    </div>
-
-                    <div className="rounded-2xl border border-dashed border-orange-200 bg-orange-50/50 p-3">
-                      <div className="text-xs font-bold text-[#FF6B00] uppercase tracking-widest">Partner staff</div>
-                      <div className="text-[11px] text-gray-600 mt-0.5">Added by a partner? Sign in with the phone they registered.</div>
-                      <input
-                        value={staffPhone}
-                        onChange={(e) => { setStaffPhone(e.target.value); setStaffError(""); }}
-                        placeholder="Your registered phone"
-                        className="mt-2 w-full rounded-xl border border-orange-200 bg-white p-2.5 text-sm outline-none focus:border-[#FF6B00]"
-                      />
-                      {staffError && <div className="text-[11px] text-red-600 mt-1">{staffError}</div>}
-                      <button
-                        onClick={staffSignIn}
-                        className="mt-2 w-full rounded-full bg-[#1A1A1A] text-white py-2 text-xs font-bold hover:bg-[#FF6B00] transition"
-                      >
-                        Sign in as staff
-                      </button>
-                    </div>
-
-                    <div className="mt-3 rounded-2xl bg-gradient-to-br from-gray-50 to-gray-100 border border-gray-200 p-3">
-                      <div className="text-xs font-bold text-gray-700 uppercase tracking-widest">👀 Just looking?</div>
-                      <p className="text-[11px] text-gray-600 mt-0.5">Explore shops, menus and prices without signing up.</p>
-                      <button
-                        onClick={() => { loginAsGuest(); nav("/customer"); }}
-                        className="mt-2 w-full rounded-full bg-[#1A1A1A] text-white py-2 text-xs font-bold hover:bg-[#FF6B00] transition"
-                      >
-                        Browse as guest
-                      </button>
-                    </div>
-                  </>
-                )}
-              </>
-            )}
-          </div>
-        </div>
-
-        <div className="mt-6 grid grid-cols-3 gap-2 text-center text-[11px] text-gray-500">
-          <div className="rounded-xl bg-white p-3 border border-gray-100">
-            <div className="text-lg">⚡</div><div className="font-bold">Fast delivery</div>
-          </div>
-          <div className="rounded-xl bg-white p-3 border border-gray-100">
-            <div className="text-lg">🔒</div><div className="font-bold">Paystack secure</div>
-          </div>
-          <div className="rounded-xl bg-white p-3 border border-gray-100">
-            <div className="text-lg">📍</div><div className="font-bold">Live tracking</div>
-          </div>
-        </div>
-
-        <div className="mt-4 text-center text-[11px] text-gray-400">
-          © {new Date().getFullYear()} INSTADAL · Made in Awka 🇳🇬
-        </div>
-      </div>
-
-      <LocationSelector
-        open={locationOpen}
-        onClose={() => setLocationOpen(false)}
-        onSelect={(s, c) => { setLocationState(s); setLocationCity(c); }}
-        initialState={locationState}
-        initialCity={locationCity}
-      />
-    </div>
-  );
-}
-
-// ---------- LiveMap ----------
-export function LiveMap({
-  shopLat, shopLng, destLat, destLng, riderLat, riderLng, showRoute = true,
-}: {
-  shopLat: number; shopLng: number; destLat: number; destLng: number;
-  riderLat?: number; riderLng?: number; showRoute?: boolean;
-}) {
-  const lats = [shopLat, destLat, riderLat ?? shopLat];
-  const lngs = [shopLng, destLng, riderLng ?? shopLng];
-  const minLat = Math.min(...lats), maxLat = Math.max(...lats);
-  const minLng = Math.min(...lngs), maxLng = Math.max(...lngs);
-  const padLat = Math.max(0.005, (maxLat - minLat) * 0.4);
-  const padLng = Math.max(0.005, (maxLng - minLng) * 0.4);
-  const boxMinLat = minLat - padLat, boxMaxLat = maxLat + padLat;
-  const boxMinLng = minLng - padLng, boxMaxLng = maxLng + padLng;
-  const toX = (lng: number) => ((lng - boxMinLng) / (boxMaxLng - boxMinLng)) * 100;
-  const toY = (lat: number) => (1 - (lat - boxMinLat) / (boxMaxLat - boxMinLat)) * 100;
-
-  const sx = toX(shopLng), sy = toY(shopLat);
-  const dx = toX(destLng), dy = toY(destLat);
-  const rx = riderLng !== undefined ? toX(riderLng) : undefined;
-  const ry = riderLat !== undefined ? toY(riderLat) : undefined;
-
-  return (
-    <div className="relative map-bg rounded-2xl overflow-hidden h-full min-h-[240px] border border-gray-200">
-      <div className="absolute top-[30%] left-0 right-0 h-1 road opacity-60" />
-      <div className="absolute top-[65%] left-0 right-0 h-1 road opacity-60" />
-      <div className="absolute left-[40%] top-0 bottom-0 w-1 road opacity-60" />
-      <div className="absolute left-[70%] top-0 bottom-0 w-1 road opacity-60" />
-
-      {showRoute && (
-        <svg className="absolute inset-0 w-full h-full pointer-events-none">
-          <line x1={`${sx}%`} y1={`${sy}%`} x2={`${dx}%`} y2={`${dy}%`} stroke="#FF6B00" strokeWidth={3} strokeDasharray="6 5" strokeLinecap="round" opacity={0.8} />
-        </svg>
-      )}
-
-      <Pin left={sx} top={sy} color="#22C55E" label="Shop" emoji="🏪" />
-      <Pin left={dx} top={dy} color="#1A1A1A" label="You"  emoji="📍" />
-      {rx !== undefined && ry !== undefined && (
-        <div className="absolute -translate-x-1/2 -translate-y-1/2 z-10" style={{ left: `${rx}%`, top: `${ry}%` }}>
-          <div className="relative rider-pulse">
-            <div className="h-10 w-10 rounded-full bg-[#FF6B00] grid place-items-center shadow-lg border-2 border-white">
-              <span className="text-lg">🛺</span>
-            </div>
-          </div>
-          <div className="mt-1 -ml-6 w-14 text-center text-[10px] font-bold text-[#FF6B00] bg-white rounded-full px-1 py-0.5 shadow">Rider</div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function Pin({ left, top, color, label, emoji }: { left: number; top: number; color: string; label: string; emoji: string }) {
-  return (
-    <div className="absolute -translate-x-1/2 -translate-y-full z-10" style={{ left: `${left}%`, top: `${top}%` }}>
-      <div className="flex flex-col items-center">
-        <div className="h-9 w-9 rounded-full grid place-items-center text-lg shadow-md border-2 border-white" style={{ background: color }}>
-          <span>{emoji}</span>
-        </div>
-        <div className="mt-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full text-white shadow" style={{ background: color }}>
-          {label}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ---------- RatingStars ----------
-export function RatingStars({
-  value, onChange, size = "md", interactive = false,
-}: {
-  value: number;
-  onChange?: (v: number) => void;
-  size?: "sm" | "md" | "lg";
-  interactive?: boolean;
-}) {
-  const sizes = { sm: "text-xs", md: "text-sm", lg: "text-lg" };
-  const [hover, setHover] = useState(0);
-  const display = hover || value;
-  return (
-    <div className={`inline-flex items-center gap-0.5 ${sizes[size]}`}>
-      {[1, 2, 3, 4, 5].map((i) => (
-        <button
-          key={i}
-          type="button"
-          disabled={!interactive}
-          onClick={() => onChange?.(i)}
-          onMouseEnter={() => interactive && setHover(i)}
-          onMouseLeave={() => interactive && setHover(0)}
-          className={`${interactive ? "cursor-pointer" : "cursor-default"} transition`}
-        >
-          <span className={i <= display ? "text-[#FF6B00]" : "text-gray-300"}>★</span>
-        </button>
-      ))}
-    </div>
-  );
-}
-
-// ---------- LocationSelector ----------
-import { NIGERIAN_STATES, NIGERIAN_LOCATIONS } from "../utils/helpers";
-
-export function LocationSelector({
-  open, onClose, onSelect, initialState, initialCity,
-}: {
-  open: boolean;
-  onClose: () => void;
-  onSelect: (state: string, city: string) => void;
-  initialState?: string;
-  initialCity?: string;
-}) {
-  const [state, setState] = useState(initialState ?? "");
-  const [city, setCity]   = useState(initialCity  ?? "");
-  const [q, setQ]         = useState("");
+  // ─────────────────────────────────────────
+  // Persist to localStorage
+  // ─────────────────────────────────────────
+  useEffect(() => {
+    localStorage.setItem(CART_KEY, JSON.stringify(cart));
+  }, [cart]);
 
   useEffect(() => {
-    if (open) { setState(initialState ?? ""); setCity(initialCity ?? ""); setQ(""); }
-  }, [open, initialState, initialCity]);
+    localStorage.setItem("instadal_state", selectedState);
+  }, [selectedState]);
 
-  if (!open) return null;
+  useEffect(() => {
+    localStorage.setItem("instadal_city", selectedCity);
+  }, [selectedCity]);
 
-  const query = q.trim().toLowerCase();
-  const filteredStates = query ? NIGERIAN_STATES.filter((s) => s.toLowerCase().includes(query)) : NIGERIAN_STATES;
-  const cities = state ? NIGERIAN_LOCATIONS[state] ?? [] : [];
-  const filteredCities = query ? cities.filter((c) => c.toLowerCase().includes(query)) : cities;
+  useEffect(() => {
+    localStorage.setItem("instadal_payment", paymentMethod);
+  }, [paymentMethod]);
 
-  return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-end md:items-center justify-center p-0 md:p-4" onClick={onClose}>
-      <div className="w-full max-w-md bg-white rounded-t-3xl md:rounded-3xl shadow-2xl max-h-[90vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
-        <div className="p-4 border-b border-gray-100 flex items-center justify-between">
-          <div>
-            <h3 className="font-extrabold text-lg">Choose your location</h3>
-            <p className="text-xs text-gray-500">We'll show you shops & items near you.</p>
-          </div>
-          <button onClick={onClose} className="h-8 w-8 rounded-full bg-gray-100 grid place-items-center">✕</button>
-        </div>
-        <div className="p-4 border-b border-gray-100">
-          <div className="flex items-center gap-2 rounded-full border border-gray-200 bg-gray-50 px-3 py-2">
-            <span>🔍</span>
-            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search state or city..." className="flex-1 bg-transparent outline-none text-sm" />
-          </div>
-        </div>
-        <div className="flex-1 overflow-auto grid md:grid-cols-2 divide-x divide-gray-100">
-          <div>
-            <div className="px-4 py-2 text-[11px] font-bold uppercase tracking-widest text-gray-400 sticky top-0 bg-white">State</div>
-            {filteredStates.map((s) => (
-              <button key={s} onClick={() => { setState(s); setCity(""); }}
-                className={`w-full text-left px-4 py-2.5 text-sm font-medium transition ${state === s ? "bg-orange-50 text-[#FF6B00] font-bold" : "hover:bg-gray-50"}`}>
-                {s}
-              </button>
-            ))}
-          </div>
-          <div>
-            <div className="px-4 py-2 text-[11px] font-bold uppercase tracking-widest text-gray-400 sticky top-0 bg-white">
-              {state ? `Cities in ${state}` : "Pick a state first"}
-            </div>
-            {filteredCities.length > 0 ? filteredCities.map((c) => (
-              <button key={c} onClick={() => setCity(c)}
-                className={`w-full text-left px-4 py-2.5 text-sm font-medium transition ${city === c ? "bg-orange-50 text-[#FF6B00] font-bold" : "hover:bg-gray-50"}`}>
-                {c}
-              </button>
-            )) : state ? (
-              <div className="px-4 py-3 text-xs text-gray-400">No cities match.</div>
-            ) : (
-              <div className="px-4 py-3 text-xs text-gray-400">← Select a state</div>
-            )}
-          </div>
-        </div>
-        <div className="p-4 border-t border-gray-100 flex gap-2">
-          <button onClick={onClose} className="flex-1 rounded-full bg-gray-100 py-2.5 text-sm font-bold">Cancel</button>
-          <button disabled={!state || !city} onClick={() => { onSelect(state, city); onClose(); }}
-            className="flex-1 rounded-full bg-[#FF6B00] text-white py-2.5 text-sm font-extrabold disabled:opacity-40">
-            Confirm {city && state ? `· ${city}, ${state}` : ""}
-          </button>
-        </div>
-      </div>
-    </div>
+  // ═════════════════════════════════════════
+  // AUTH ACTIONS
+  // ═════════════════════════════════════════
+
+  /**
+   * SIGN UP
+   * No OTP. Uses Supabase email/password auth with phone as the "email"
+   * (formatted as phone@instadal.app) so we keep Supabase auth simple
+   * without needing a real SMS provider.
+   *
+   * Stores name, phone, role, state, city in the profiles table via
+   * the existing trigger or manual upsert below.
+   *
+   * If you later switch to a real email/phone provider, only this
+   * function needs updating — nothing else changes.
+   */
+  const signUp = async (
+    name: string,
+    phone: string,
+    password: string,
+    primaryRole: RoleView,
+    locationState: string,
+    locationCity: string
+  ) => {
+    // Derive a stable fake email from the phone so Supabase can store it
+    const normalizedPhone = phone.replace(/\s+/g, "").replace(/^0/, "234");
+    const fakeEmail = `${normalizedPhone}@instadal.app`;
+    const defaultPassword = password;
+
+    // 1. Create Supabase auth user
+    const { data: authData, error: authError } = await supabase.auth.signUp({
+      email: fakeEmail,
+      password: defaultPassword,
+      options: {
+        data: {
+          name,
+          phone,
+          primary_role: primaryRole,
+          location_state: locationState,
+          location_city: locationCity,
+        },
+      },
+    });
+
+    if (authError) {
+      // "User already registered" → they should sign in instead
+      if (authError.message.toLowerCase().includes("already registered")) {
+        throw new Error("This phone number already has an account. Please sign in.");
+      }
+      throw new Error(authError.message);
+    }
+
+    if (!authData.user) throw new Error("Sign up failed. Please try again.");
+
+    // 2. Upsert profile row (handles both trigger-created and manual)
+    const { error: profileError } = await supabase
+      .from("profiles")
+      .upsert({
+        id: authData.user.id,
+        name,
+        phone,
+        primary_role: primaryRole,
+        location_state: locationState,
+        location_city: locationCity,
+      });
+
+    if (profileError) throw new Error(profileError.message);
+
+    // 3. Set local user state immediately (no email confirm needed in dev)
+    const u: User = {
+      id: authData.user.id,
+      name,
+      phone,
+      primaryRole,
+      allowedViews: DEFAULT_ALLOWED_VIEWS[primaryRole],
+      locationState,
+      locationCity,
+    };
+    setUser(u);
+    setCurrentViewState(primaryRole);
+    setSelectedState(locationState);
+    setSelectedCity(locationCity);
+  };
+
+  /**
+   * SIGN IN
+   * Phone + password. Password defaults to the normalized phone number
+   * set during sign-up (e.g. 2348012345678). User can update it later.
+   * Returns the user's primary role so the UI can navigate correctly.
+   */
+  const signIn = async (phone: string, password: string): Promise<RoleView> => {
+    const normalizedPhone = phone.replace(/\s+/g, "").replace(/^0/, "234");
+    const fakeEmail = `${normalizedPhone}@instadal.app`;
+
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: fakeEmail,
+      password,
+    });
+
+    if (error) {
+      if (
+        error.message.toLowerCase().includes("invalid") ||
+        error.message.toLowerCase().includes("credentials")
+      ) {
+        throw new Error("Incorrect phone number or password.");
+      }
+      throw new Error(error.message);
+    }
+
+    if (!data.user) throw new Error("Sign in failed. Please try again.");
+
+    // Profile is loaded by the onAuthStateChange listener,
+    // but we still need to return the role for navigation.
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("primary_role, location_state, location_city")
+      .eq("id", data.user.id)
+      .single();
+
+    const role = (profile?.primary_role as RoleView) ?? "customer";
+
+    if (profile?.location_state) setSelectedState(profile.location_state);
+    if (profile?.location_city) setSelectedCity(profile.location_city);
+
+    showToast("Welcome back! 👋");
+    return role;
+  };
+
+  /**
+   * ADMIN LOGIN
+   * Triggered when the user types "admin" in the phone field on the
+   * sign-in tab. Checks a PIN — no Supabase session involved,
+   * just a local privileged user object.
+   */
+  const loginAsAdmin = async (pin: string) => {
+    // Simulate a short async check (replace with a real API call if needed)
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    if (pin !== ADMIN_PIN) throw new Error("Incorrect PIN.");
+
+    const u: User = {
+      id: "u_admin_local",
+      name: "Admin",
+      phone: "admin",
+      primaryRole: "admin",
+      allowedViews: ["customer", "partner", "rider", "admin"],
+    };
+    setUser(u);
+    setCurrentViewState("admin");
+    showToast("Admin access granted 🛠️");
+  };
+
+  const loginAsGuest = () => {
+    const u: User = {
+      id: "u_guest_" + Date.now(),
+      name: "Guest",
+      phone: "",
+      primaryRole: "customer",
+      allowedViews: ["customer"],
+      isGuest: true,
+    };
+    setUser(u);
+    setCurrentViewState("customer");
+    showToast("Browsing as guest — sign up to place orders");
+  };
+
+  const loginAsStaff = (staff: PartnerStaff) => {
+    const u: User = {
+      id: "u_staff_" + staff.id,
+      name: staff.name,
+      phone: staff.phone,
+      primaryRole: "partner",
+      allowedViews: ["customer", "partner"],
+      partnerPermissions: staff.permissions,
+      isStaffAccount: true,
+    };
+    setUser(u);
+    setCurrentViewState("partner");
+    showToast(`Signed in as ${u.name} (staff)`);
+  };
+
+  const logout = async () => {
+    // Guest and staff don't have a real Supabase session
+    if (!user?.isGuest && !user?.isStaffAccount && user?.id !== "u_admin_local") {
+      await supabase.auth.signOut();
+    }
+    setUser(null);
+    setSession(null);
+    setCurrentViewState("customer");
+    setOrders([]);
+    setSavedAddresses([]);
+  };
+
+  const setCurrentView = (v: RoleView) => {
+    if (!user) { setCurrentViewState(v); return; }
+    if (user.allowedViews.includes(v)) setCurrentViewState(v);
+  };
+
+  const canView = (v: RoleView) => {
+    if (!user) return false;
+    return user.allowedViews.includes(v);
+  };
+
+  const canPartner = (p: PartnerPermission) => {
+    if (!user) return false;
+    if (user.primaryRole === "admin") return true;
+    if (user.primaryRole === "partner" && !user.isStaffAccount) return true;
+    if (user.partnerPermissions) return user.partnerPermissions.includes(p);
+    return false;
+  };
+
+  // ═════════════════════════════════════════
+  // SHOPS
+  // ═════════════════════════════════════════
+
+  const toggleShopOpen = async (id: string) => {
+    const shop = shops.find((s) => s.id === id);
+    if (!shop) return;
+    const { error } = await supabase
+      .from("shops")
+      .update({ is_open: !shop.isOpen })
+      .eq("id", id);
+    if (!error)
+      setShops((s) => s.map((x) => x.id === id ? { ...x, isOpen: !x.isOpen } : x));
+  };
+
+  // ═════════════════════════════════════════
+  // CART
+  // ═════════════════════════════════════════
+
+  const addToCart = (p: Product) => {
+    setCart((c) => {
+      const ex = c.find((i) => i.product.id === p.id);
+      if (ex) return c.map((i) => i.product.id === p.id ? { ...i, quantity: i.quantity + 1 } : i);
+      return [...c, { product: p, quantity: 1 }];
+    });
+    showToast(`Added ${p.name}`);
+  };
+
+  const removeFromCart = (pid: string) =>
+    setCart((c) => c.filter((i) => i.product.id !== pid));
+
+  const updateQty = (pid: string, qty: number) =>
+    setCart((c) =>
+      qty <= 0
+        ? c.filter((i) => i.product.id !== pid)
+        : c.map((i) => i.product.id === pid ? { ...i, quantity: qty } : i)
+    );
+
+  const clearCart = () => setCart([]);
+
+  // ═════════════════════════════════════════
+  // ORDERS
+  // ═════════════════════════════════════════
+
+  const placeOrder = async (
+    address: string,
+    lat: number,
+    lng: number,
+    phone: string
+  ): Promise<Order> => {
+    if (!cart.length) throw new Error("Empty cart");
+    if (!user || user.isGuest) throw new Error("Sign in to place orders");
+
+    const shop = shops.find((s) => s.id === cart[0].product.shopId);
+    if (!shop) throw new Error("Shop not found");
+
+    const subtotal = cart.reduce((s, i) => s + i.product.price * i.quantity, 0);
+    const serviceFee = Math.round(subtotal * 0.07);
+    const deliveryFee = 500;
+    const total = subtotal + serviceFee + deliveryFee;
+
+    const { data: orderRow, error: orderErr } = await supabase
+      .from("orders")
+      .insert({
+        customer_id: user.id,
+        customer_name: user.name,
+        customer_phone: phone,
+        shop_id: shop.id,
+        shop_name: shop.name,
+        shop_lat: shop.lat,
+        shop_lng: shop.lng,
+        subtotal,
+        service_fee: serviceFee,
+        delivery_fee: deliveryFee,
+        total,
+        delivery_address: address,
+        delivery_lat: lat,
+        delivery_lng: lng,
+        status: "pending",
+        payment_method: paymentMethod,
+      })
+      .select()
+      .single();
+
+    if (orderErr || !orderRow) throw new Error(orderErr?.message ?? "Failed to place order");
+
+    const items = cart.map((i) => ({
+      order_id: orderRow.id,
+      product_id: i.product.id,
+      name: i.product.name,
+      price: i.product.price,
+      quantity: i.quantity,
+      image: i.product.image,
+    }));
+
+    await supabase.from("order_items").insert(items);
+
+    clearCart();
+    showToast("Order placed! 🎉");
+
+    // Auto-save delivery address if it's new
+    const alreadySaved = savedAddresses.some(
+      (a) => a.label.trim().toLowerCase() === address.trim().toLowerCase()
+    );
+    if (!alreadySaved && address.trim()) {
+      const isFirst = savedAddresses.length === 0;
+      await supabase.from("saved_addresses").insert({
+        user_id: user.id,
+        label: address.trim(),
+        lat,
+        lng,
+        is_default: isFirst,
+      });
+      const newAddr: SavedAddress = {
+        id: crypto.randomUUID(),
+        label: address.trim(),
+        lat,
+        lng,
+        isDefault: isFirst,
+      };
+      setSavedAddresses((prev) => [...prev, newAddr]);
+    }
+
+    const order = rowToOrder({ ...orderRow, order_items: items });
+    setOrders((o) => [order, ...o]);
+    return order;
+  };
+
+  const updateOrderStatus = async (
+    id: string,
+    status: Order["status"],
+    patch?: Partial<Order>
+  ) => {
+    const dbPatch: Record<string, unknown> = { status };
+    if (status === "delivered") dbPatch.delivered_at = new Date().toISOString();
+    if (patch?.riderId) dbPatch.rider_id = patch.riderId;
+    if (patch?.riderName) dbPatch.rider_name = patch.riderName;
+    if (patch?.riderLat) dbPatch.rider_lat = patch.riderLat;
+    if (patch?.riderLng) dbPatch.rider_lng = patch.riderLng;
+
+    const { error } = await supabase.from("orders").update(dbPatch).eq("id", id);
+    if (!error) {
+      setOrders((list) =>
+        list.map((o) =>
+          o.id === id
+            ? { ...o, ...patch, status, deliveredAt: status === "delivered" ? Date.now() : o.deliveredAt }
+            : o
+        )
+      );
+    }
+  };
+
+  const assignRider = async (orderId: string, riderId: string) => {
+    const rider = riders.find((r) => r.id === riderId);
+    if (!rider) return;
+    await updateOrderStatus(orderId, "rider_assigned", {
+      riderId: rider.id,
+      riderName: rider.name,
+      riderLat: rider.lat,
+      riderLng: rider.lng,
+    });
+  };
+
+  // ═════════════════════════════════════════
+  // RIDERS
+  // ═════════════════════════════════════════
+
+  const toggleRiderAvailability = async (id: string) => {
+    const rider = riders.find((r) => r.id === id);
+    if (!rider) return;
+    const { error } = await supabase
+      .from("riders")
+      .update({ is_available: !rider.isAvailable })
+      .eq("id", id);
+    if (!error)
+      setRiders((rs) => rs.map((r) => r.id === id ? { ...r, isAvailable: !r.isAvailable } : r));
+  };
+
+  const updateRiderLocation = async (id: string, lat: number, lng: number) => {
+    await supabase.from("riders").update({ lat, lng }).eq("id", id);
+    setRiders((rs) => rs.map((r) => r.id === id ? { ...r, lat, lng } : r));
+    setOrders((list) =>
+      list.map((o) => o.riderId === id ? { ...o, riderLat: lat, riderLng: lng } : o)
+    );
+  };
+
+  // ═════════════════════════════════════════
+  // PARTNER STAFF
+  // ═════════════════════════════════════════
+
+  const addStaff = async (
+    name: string,
+    phone: string,
+    permissions: PartnerPermission[]
+  ): Promise<PartnerStaff> => {
+    const { data: shopRow } = await supabase
+      .from("shops")
+      .select("id")
+      .eq("owner_id", user?.id)
+      .single();
+
+    if (!shopRow) throw new Error("Shop not found");
+
+    const { data, error } = await supabase
+      .from("partner_staff")
+      .insert({ shop_id: shopRow.id, name, phone, permissions })
+      .select()
+      .single();
+
+    if (error || !data) throw new Error(error?.message ?? "Failed to add staff");
+    const s = rowToStaff(data);
+    setPartnerStaff((list) => [...list, s]);
+    return s;
+  };
+
+  const updateStaffPermissions = async (id: string, permissions: PartnerPermission[]) => {
+    const { error } = await supabase
+      .from("partner_staff")
+      .update({ permissions })
+      .eq("id", id);
+    if (!error)
+      setPartnerStaff((list) => list.map((s) => s.id === id ? { ...s, permissions } : s));
+  };
+
+  const removeStaff = async (id: string) => {
+    const { error } = await supabase.from("partner_staff").delete().eq("id", id);
+    if (!error) setPartnerStaff((list) => list.filter((s) => s.id !== id));
+  };
+
+  // ═════════════════════════════════════════
+  // RATINGS
+  // ═════════════════════════════════════════
+
+  const submitRating = async (
+    targetType: "shop" | "product",
+    targetId: string,
+    score: number,
+    comment?: string
+  ) => {
+    if (!user || user.isGuest) { showToast("Sign in to rate"); return; }
+
+    const payload = {
+      user_id: user.id,
+      user_name: user.name,
+      target_type: targetType,
+      target_id: targetId,
+      score: Math.max(1, Math.min(5, Math.round(score))),
+      comment: comment ?? null,
+    };
+
+    const { data, error } = await supabase
+      .from("ratings")
+      .upsert(payload, { onConflict: "user_id,target_type,target_id" })
+      .select()
+      .single();
+
+    if (!error && data) {
+      const r = rowToRating(data);
+      setRatings((list) => {
+        const filtered = list.filter(
+          (x) => !(x.userId === r.userId && x.targetType === r.targetType && x.targetId === r.targetId)
+        );
+        return [r, ...filtered];
+      });
+      showToast("Thanks for your rating! ⭐");
+    }
+  };
+
+  // ═════════════════════════════════════════
+  // SAVED ADDRESSES
+  // ═════════════════════════════════════════
+
+  const addAddress = async (a: Omit<SavedAddress, "id">): Promise<SavedAddress> => {
+    if (!user) throw new Error("Not authenticated");
+
+    if (a.isDefault) {
+      await supabase.from("saved_addresses").update({ is_default: false }).eq("user_id", user.id);
+    }
+
+    const { data, error } = await supabase
+      .from("saved_addresses")
+      .insert({
+        user_id: user.id,
+        label: a.label,
+        address: a.address,
+        maps_link: a.mapsLink ?? null,
+        lat: a.lat ?? null,
+        lng: a.lng ?? null,
+        is_default: a.isDefault ?? false,
+      })
+      .select()
+      .single();
+
+    if (error || !data) throw new Error(error?.message ?? "Failed to save address");
+    const addr = rowToAddress(data);
+    setSavedAddresses((list) => {
+      const next = addr.isDefault ? list.map((x) => ({ ...x, isDefault: false })) : list;
+      return [...next, addr];
+    });
+    return addr;
+  };
+
+  const updateAddress = async (id: string, patch: Partial<SavedAddress>) => {
+    const { error } = await supabase
+      .from("saved_addresses")
+      .update({
+        label: patch.label,
+        address: patch.address,
+        maps_link: patch.mapsLink,
+        lat: patch.lat,
+        lng: patch.lng,
+        is_default: patch.isDefault,
+      })
+      .eq("id", id);
+    if (!error)
+      setSavedAddresses((list) => list.map((a) => a.id === id ? { ...a, ...patch } : a));
+  };
+
+  const removeAddress = async (id: string) => {
+    const { error } = await supabase.from("saved_addresses").delete().eq("id", id);
+    if (!error) setSavedAddresses((list) => list.filter((a) => a.id !== id));
+  };
+
+  const setDefaultAddress = async (id: string) => {
+    if (!user) return;
+    await supabase.from("saved_addresses").update({ is_default: false }).eq("user_id", user.id);
+    await supabase.from("saved_addresses").update({ is_default: true }).eq("id", id);
+    setSavedAddresses((list) => list.map((a) => ({ ...a, isDefault: a.id === id })));
+  };
+
+  // ═════════════════════════════════════════
+  // PARTNER APPLICATIONS
+  // ═════════════════════════════════════════
+
+  const submitApplication = async (
+    a: Omit<PartnerApplication, "id" | "status" | "createdAt">
+  ): Promise<PartnerApplication> => {
+    const { data, error } = await supabase
+      .from("partner_applications")
+      .insert({
+        business_name: a.businessName,
+        owner_name: a.ownerName,
+        phone: a.phone,
+        email: a.email,
+        state: a.state,
+        city: a.city,
+        address: a.address,
+        category: a.category,
+        description: a.description,
+        video_link: a.videoLink,
+        preview_products: a.previewProducts,
+        status: "pending",
+      })
+      .select()
+      .single();
+
+    if (error || !data) throw new Error(error?.message ?? "Failed to submit application");
+    const app = rowToApplication(data);
+    setApplications((list) => [app, ...list]);
+    return app;
+  };
+
+  const approveApplication = async (id: string) => {
+    const app = applications.find((a) => a.id === id);
+    if (!app) return;
+
+    await supabase
+      .from("partner_applications")
+      .update({ status: "approved", reviewed_at: new Date().toISOString() })
+      .eq("id", id);
+
+    const categoryToId: Record<string, string> = {
+      Restaurant: "food", "Fast Food": "fast-food",
+      Grocery: "grocery", Pharmacy: "pharmacy", "Ice Cream": "ice-cream",
+    };
+
+    const { data: shopData } = await supabase
+      .from("shops")
+      .insert({
+        owner_id: user!.id,
+        name: app.businessName,
+        category: app.category,
+        category_id: categoryToId[app.category] ?? "others",
+        description: app.description,
+        address: app.address,
+        state: app.state,
+        city: app.city,
+        lat: AWKA_CENTER.lat,
+        lng: AWKA_CENTER.lng,
+        logo: "🏪",
+        prep_time: "30-45 min",
+        is_open: false,
+        is_approved: true,
+      })
+      .select()
+      .single();
+
+    if (shopData) setShops((list) => [...list, rowToShop(shopData)]);
+
+    setApplications((list) =>
+      list.map((a) => a.id === id ? { ...a, status: "approved", reviewedAt: Date.now() } : a)
+    );
+    showToast("Application approved ✓");
+  };
+
+  const rejectApplication = async (id: string, reason?: string) => {
+    await supabase
+      .from("partner_applications")
+      .update({
+        status: "rejected",
+        reviewed_at: new Date().toISOString(),
+        rejection_reason: reason ?? null,
+      })
+      .eq("id", id);
+
+    setApplications((list) =>
+      list.map((a) =>
+        a.id === id
+          ? { ...a, status: "rejected", reviewedAt: Date.now(), rejectionReason: reason }
+          : a
+      )
+    );
+    showToast("Application rejected");
+  };
+
+  // ─────────────────────────────────────────
+  // Location / payment
+  // ─────────────────────────────────────────
+  const setLocation = (state: string, city: string) => {
+    setSelectedState(state);
+    setSelectedCity(city);
+    showToast(`Location set to ${city}, ${state}`);
+  };
+
+  // ─────────────────────────────────────────
+  // Context value
+  // ─────────────────────────────────────────
+  const value = useMemo<AppContextValue>(
+    () => ({
+      user, session, currentView, authLoading,
+      signUp, signIn, loginAsAdmin, loginAsGuest, loginAsStaff, logout,
+      setCurrentView, canView, canPartner,
+      shops, shopsLoading, toggleShopOpen,
+      customerLoc, customerAddress, setCustomerAddress,
+      cart, addToCart, removeFromCart, updateQty, clearCart,
+      orders, ordersLoading, placeOrder, updateOrderStatus, assignRider,
+      riders, toggleRiderAvailability, updateRiderLocation,
+      partnerStaff, addStaff, updateStaffPermissions, removeStaff,
+      ratings, submitRating,
+      savedAddresses, addAddress, updateAddress, removeAddress, setDefaultAddress,
+      applications, submitApplication, approveApplication, rejectApplication,
+      selectedState, selectedCity, setLocation,
+      paymentMethod, setPaymentMethod,
+      toast, showToast,
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [
+      user, session, currentView, authLoading,
+      shops, shopsLoading,
+      customerAddress, cart,
+      orders, ordersLoading,
+      riders, partnerStaff, ratings, savedAddresses, applications,
+      selectedState, selectedCity, paymentMethod, toast,
+    ]
   );
+
+  return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }
 
-// ---------- AddressCard ----------
-import type { SavedAddress } from "../utils/helpers";
-
-export function AddressCard({
-  addr, selected, onSelect, onEdit, onDelete,
-}: {
-  addr: SavedAddress;
-  selected?: boolean;
-  onSelect?: () => void;
-  onEdit?: () => void;
-  onDelete?: () => void;
-}) {
-  return (
-    <button
-      onClick={onSelect}
-      className={`w-full text-left rounded-2xl p-3 border-2 transition ${selected ? "border-[#FF6B00] bg-orange-50" : "border-gray-200 bg-white hover:border-gray-300"}`}
-    >
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <div className={`h-5 w-5 rounded-full border-2 grid place-items-center ${selected ? "border-[#FF6B00]" : "border-gray-300"}`}>
-            {selected && <div className="h-2.5 w-2.5 rounded-full bg-[#FF6B00]" />}
-          </div>
-          <div>
-            <div className="font-bold text-sm flex items-center gap-2">
-              {addr.label}
-              {addr.isDefault && <span className="text-[10px] font-bold bg-green-100 text-green-700 px-1.5 py-0.5 rounded">DEFAULT</span>}
-            </div>
-            <div className="text-xs text-gray-600 mt-0.5">{addr.address}</div>
-          </div>
-        </div>
-        <div className="flex flex-col gap-1" onClick={(e) => e.stopPropagation()}>
-          {onEdit   && <button onClick={onEdit}   className="text-[11px] font-bold text-gray-500 hover:text-[#FF6B00]">Edit</button>}
-          {onDelete && <button onClick={onDelete} className="text-[11px] font-bold text-red-500 hover:text-red-600">Delete</button>}
-        </div>
-      </div>
-      {addr.mapsLink && (
-        <a
-          href={addr.mapsLink}
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={(e) => e.stopPropagation()}
-          className="mt-2 inline-flex items-center gap-1 text-[11px] font-bold text-[#FF6B00] hover:underline"
-        >
-          📍 Open in Google Maps
-        </a>
-      )}
-    </button>
-  );
+export function useApp() {
+  const ctx = useContext(AppContext);
+  if (!ctx) throw new Error("useApp must be used within AppProvider");
+  return ctx;
 }
