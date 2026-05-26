@@ -610,10 +610,11 @@ function Row({ label, value }: { label: React.ReactNode; value: React.ReactNode 
 // CHECKOUT
 // ===========================================================
 export function CheckoutPage() {
-  const { cart, placeOrder, customerLoc, customerAddress, setCustomerAddress, showToast, user } = useApp();
+  const { cart, placeOrder, customerLoc, customerAddress, setCustomerAddress, showToast, user, savedAddresses } = useApp();
   const nav = useNavigate();
-  const [address, setAddress] = useState(customerAddress);
-  const [phone, setPhone] = useState("08012345678");
+  const defaultAddr = savedAddresses.find((a) => a.isDefault);
+  const [address, setAddress] = useState(defaultAddr?.label ?? customerAddress);
+  const [phone, setPhone] = useState(user?.phone ?? "");
   const [paying, setPaying] = useState(false);
 
   // Guests can't checkout — nudge to sign up
@@ -657,15 +658,13 @@ export function CheckoutPage() {
     }
     setPaying(true);
     setCustomerAddress(address);
-    // Simulate Paystack popup
-    await new Promise((r) => setTimeout(r, 1200));
     try {
-      const o = placeOrder(address, customerLoc.lat, customerLoc.lng, phone);
+      const o = await placeOrder(address, customerLoc.lat, customerLoc.lng, phone);
       setPaying(false);
       nav(`/track/${o.id}`);
     } catch (e) {
       setPaying(false);
-      showToast("Payment failed");
+      showToast("Order failed — please try again");
     }
   };
 
@@ -679,11 +678,28 @@ export function CheckoutPage() {
 
         <div className="mt-4 rounded-2xl bg-white border border-gray-100 p-4 shadow-sm">
           <label className="text-xs font-bold text-gray-500">Delivery address</label>
+          {savedAddresses.length > 0 && (
+            <div className="mt-2 flex gap-2 flex-wrap">
+              {savedAddresses.map((a) => (
+                <button
+                  key={a.id}
+                  onClick={() => setAddress(a.label)}
+                  className={`rounded-full px-3 py-1.5 text-xs font-bold border transition ${
+                    address === a.label
+                      ? "bg-[#FF6B00] text-white border-[#FF6B00]"
+                      : "bg-gray-50 text-gray-700 border-gray-200 hover:border-[#FF6B00]"
+                  }`}
+                >
+                  {a.isDefault ? "📍 " : ""}{a.label}
+                </button>
+              ))}
+            </div>
+          )}
           <textarea
             value={address}
             onChange={(e) => setAddress(e.target.value)}
             rows={2}
-            className="mt-1 w-full rounded-xl border border-gray-200 bg-gray-50 p-3 text-sm outline-none focus:border-[#FF6B00] focus:bg-white"
+            className="mt-2 w-full rounded-xl border border-gray-200 bg-gray-50 p-3 text-sm outline-none focus:border-[#FF6B00] focus:bg-white"
             placeholder="House number, street, landmark..."
           />
         </div>
@@ -730,11 +746,8 @@ export function CheckoutPage() {
           disabled={paying}
           className="mt-5 w-full rounded-full bg-[#FF6B00] text-white py-3 font-extrabold shadow-lg shadow-orange-200 hover:bg-[#E55A00] transition disabled:opacity-60"
         >
-          {paying ? "Processing Paystack..." : `Pay ${formatNGN(fees.total)}`}
+          {paying ? "Placing order..." : `Place order · ${formatNGN(fees.total)}`}
         </button>
-        <p className="text-[11px] text-center text-gray-400 mt-2">This is a demo — no real charge will occur.</p>
-        {/* Hidden: show shop name so user knows which shop */}
-        <p className="text-xs text-center text-gray-500 mt-1">From {shop?.product?.shopId ? "shop" : ""}</p>
       </div>
       <BottomNav />
     </div>
