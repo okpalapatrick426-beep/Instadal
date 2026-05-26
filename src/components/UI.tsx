@@ -369,6 +369,8 @@ export function AuthPage() {
   const [locationCity, setLocationCity] = useState("");
   const [locationOpen, setLocationOpen] = useState(false);
   const [signupPhone, setSignupPhone] = useState("");
+  const [signupPassword, setSignupPassword] = useState("");
+  const [signupShowPw, setSignupShowPw] = useState(false);
   const [signupLoading, setSignupLoading] = useState(false);
   const [signupError, setSignupError] = useState("");
 
@@ -398,7 +400,7 @@ export function AuthPage() {
 
   const resetSignup = () => {
     setName(""); setLocationState(""); setLocationCity("");
-    setSignupPhone(""); setSignupError("");
+    setSignupPhone(""); setSignupPassword(""); setSignupError("");
   };
   const resetSignin = () => {
     setSiPhone(""); setSiPassword(""); setSiError("");
@@ -419,13 +421,14 @@ export function AuthPage() {
 
   const handleSignUp = async () => {
     setSignupError("");
-    if (!name.trim())        { setSignupError("Please enter your name");        return; }
-    if (!locationState)      { setSignupError("Please choose your location");   return; }
-    if (!locationCity)       { setSignupError("Please choose your city");       return; }
-    if (!signupPhone.trim()) { setSignupError("Please enter your phone number"); return; }
+    if (!name.trim())            { setSignupError("Please enter your name");            return; }
+    if (!locationState)          { setSignupError("Please choose your location");        return; }
+    if (!locationCity)           { setSignupError("Please choose your city");            return; }
+    if (!signupPhone.trim())     { setSignupError("Please enter your phone number");     return; }
+    if (signupPassword.trim().length < 6) { setSignupError("Password must be at least 6 characters"); return; }
     setSignupLoading(true);
     try {
-      await signUp(name.trim(), signupPhone.trim(), primaryRole, locationState, locationCity);
+      await signUp(name.trim(), signupPhone.trim(), signupPassword.trim(), primaryRole, locationState, locationCity);
       showToast(`Welcome to Instadal, ${name.split(" ")[0]}! 🎉`);
       nav("/" + primaryRole);
     } catch (e: unknown) {
@@ -571,6 +574,26 @@ export function AuthPage() {
                     inputMode="tel"
                     className="mt-1 w-full rounded-xl border border-gray-200 bg-gray-50 p-3 text-sm outline-none focus:border-[#FF6B00] focus:bg-white"
                   />
+                </div>
+
+                <div className="mt-3">
+                  <label className="text-xs font-bold text-gray-500">Password</label>
+                  <div className="relative mt-1">
+                    <input
+                      type={signupShowPw ? "text" : "password"}
+                      value={signupPassword}
+                      onChange={(e) => setSignupPassword(e.target.value)}
+                      placeholder="At least 6 characters"
+                      className="w-full rounded-xl border border-gray-200 bg-gray-50 p-3 pr-16 text-sm outline-none focus:border-[#FF6B00] focus:bg-white"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setSignupShowPw((v) => !v)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-400 hover:text-[#FF6B00]"
+                    >
+                      {signupShowPw ? "Hide" : "Show"}
+                    </button>
+                  </div>
                 </div>
 
                 {signupError && <p className="mt-2 text-xs text-red-600">{signupError}</p>}
