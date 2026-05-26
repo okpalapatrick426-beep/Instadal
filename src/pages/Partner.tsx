@@ -80,29 +80,24 @@ function PartnerShell({ children, tab }: { children: React.ReactNode; tab: strin
 
 // Partner login
 export function PartnerLogin() {
-  const { signIn, verifyOtp } = useApp();
+  const { signIn } = useApp();
   const nav = useNavigate();
   const [phone, setPhone] = useState("");
-  const [otp, setOtp] = useState("");
-  const [otpSent, setOtpSent] = useState(false);
+  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const handleSend = async () => {
+  const handleLogin = async () => {
     setError("");
     if (!phone.trim()) { setError("Enter your phone number"); return; }
+    if (!password.trim()) { setError("Enter your password"); return; }
     setLoading(true);
-    try { await signIn(phone.trim()); setOtpSent(true); }
-    catch (e: unknown) { setError(e instanceof Error ? e.message : "Failed to send OTP"); }
-    finally { setLoading(false); }
-  };
-
-  const handleVerify = async () => {
-    setError("");
-    if (!otp.trim()) { setError("Enter the OTP"); return; }
-    setLoading(true);
-    try { await verifyOtp(phone.trim(), otp.trim()); nav("/partner"); }
-    catch (e: unknown) { setError(e instanceof Error ? e.message : "Invalid OTP"); }
+    try {
+      const role = await signIn(phone.trim(), password.trim());
+      if (role !== "partner") { setError("This account does not have partner access."); return; }
+      nav("/partner");
+    }
+    catch (e: unknown) { setError(e instanceof Error ? e.message : "Sign in failed"); }
     finally { setLoading(false); }
   };
 
@@ -114,33 +109,20 @@ export function PartnerLogin() {
           <span className="font-extrabold text-lg">INSTADAL Partner</span>
         </div>
         <div className="rounded-3xl bg-white p-6 shadow-xl border border-gray-100">
-          <h2 className="text-xl font-extrabold">{otpSent ? "Enter OTP" : "Partner sign in"}</h2>
-          <p className="text-sm text-gray-500">{otpSent ? `Code sent to ${phone}` : "Manage your shop & receive orders."}</p>
-          {!otpSent ? (
-            <>
-              <label className="mt-4 block text-xs font-bold text-gray-500">Phone number</label>
-              <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="080xxxxxxxx"
-                className="mt-1 w-full rounded-xl border border-gray-200 bg-gray-50 p-3 text-sm outline-none focus:border-[#FF6B00]" />
-              {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
-              <button onClick={handleSend} disabled={loading}
-                className="mt-5 w-full rounded-full bg-[#FF6B00] text-white py-3 font-extrabold disabled:opacity-60">
-                {loading ? "Sending..." : "Send OTP →"}
-              </button>
-            </>
-          ) : (
-            <>
-              <label className="mt-4 block text-xs font-bold text-gray-500">6-digit OTP</label>
-              <input value={otp} onChange={(e) => setOtp(e.target.value)} placeholder="123456" maxLength={6}
-                className="mt-1 w-full rounded-xl border border-gray-200 bg-gray-50 p-3 text-sm outline-none focus:border-[#FF6B00] text-center text-xl tracking-widest font-bold" />
-              {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
-              <button onClick={handleVerify} disabled={loading}
-                className="mt-5 w-full rounded-full bg-[#FF6B00] text-white py-3 font-extrabold disabled:opacity-60">
-                {loading ? "Verifying..." : "Verify & Enter →"}
-              </button>
-              <button onClick={() => { setOtpSent(false); setOtp(""); setError(""); }}
-                className="mt-2 w-full text-sm text-gray-500 hover:text-[#FF6B00]">← Change number</button>
-            </>
-          )}
+          <h2 className="text-xl font-extrabold">Partner sign in</h2>
+          <p className="text-sm text-gray-500">Manage your shop & receive orders.</p>
+          <label className="mt-4 block text-xs font-bold text-gray-500">Phone number</label>
+          <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="080xxxxxxxx"
+            className="mt-1 w-full rounded-xl border border-gray-200 bg-gray-50 p-3 text-sm outline-none focus:border-[#FF6B00]" />
+          <label className="mt-3 block text-xs font-bold text-gray-500">Password</label>
+          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••"
+            className="mt-1 w-full rounded-xl border border-gray-200 bg-gray-50 p-3 text-sm outline-none focus:border-[#FF6B00]"
+            onKeyDown={(e) => e.key === "Enter" && handleLogin()} />
+          {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
+          <button onClick={handleLogin} disabled={loading}
+            className="mt-5 w-full rounded-full bg-[#FF6B00] text-white py-3 font-extrabold disabled:opacity-60">
+            {loading ? "Signing in..." : "Sign in →"}
+          </button>
         </div>
         <p className="text-center text-xs text-gray-500 mt-4">New to Instadal? <Link to="/" className="font-bold text-[#FF6B00]">Back to home</Link></p>
       </div>
