@@ -55,10 +55,10 @@ type AppContextValue = {
   currentView: RoleView;
   authLoading: boolean;
 
-  // Updated auth signatures — no more OTP
   signUp: (
     name: string,
     phone: string,
+    password: string,
     primaryRole: RoleView,
     locationState: string,
     locationCity: string
@@ -571,6 +571,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const signUp = async (
     name: string,
     phone: string,
+    password: string,
     primaryRole: RoleView,
     locationState: string,
     locationCity: string
@@ -578,8 +579,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // Derive a stable fake email from the phone so Supabase can store it
     const normalizedPhone = phone.replace(/\s+/g, "").replace(/^0/, "234");
     const fakeEmail = `${normalizedPhone}@instadal.app`;
-    // Use phone as the default password (user can change later via profile)
-    const defaultPassword = normalizedPhone;
+    const defaultPassword = password;
 
     // 1. Create Supabase auth user
     const { data: authData, error: authError } = await supabase.auth.signUp({
@@ -862,6 +862,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     clearCart();
     showToast("Order placed! 🎉");
+
+    // Auto-save delivery address if it's new
+    const alreadySaved = savedAddresses.some(
+      (a) => a.label.trim().toLowerCase() === address.trim().toLowerCase()
+    );
+    if (!alreadySaved && address.trim()) {
+      const isFirst = savedAddresses.length === 0;
+      await supabase.from("saved_addresses").insert({
+        user_id: user.id,
+        label: address.trim(),
+        lat,
+        lng,
+        is_default: isFirst,
+      });
+      const newAddr: SavedAddress = {
+        id: crypto.randomUUID(),
+        label: address.trim(),
+        lat,
+        lng,
+        isDefault: isFirst,
+      };
+      setSavedAddresses((prev) => [...prev, newAddr]);
+    }
 
     const order = rowToOrder({ ...orderRow, order_items: items });
     setOrders((o) => [order, ...o]);
